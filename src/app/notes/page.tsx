@@ -22,6 +22,8 @@ export default function NotesPage() {
   const [content, setContent] = useState('');
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
 
   useEffect(() => {
     fetchNotes();
@@ -43,35 +45,46 @@ export default function NotesPage() {
   };
 
   const createBlankNote = async () => {
-    // Find the highest Untitled_X number in existing notes
-    const untitledNotes = notes.filter(note => note.title.startsWith('Untitled_'));
-    const numbers = untitledNotes.map(note => {
-      const match = note.title.match(/Untitled_(\d+)/);
-      return match ? parseInt(match[1]) : 0;
-    });
-    const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
-    const newTitle = `Untitled_${nextNumber}`;
+    // Prevent multiple simultaneous note creations
+    if (isCreatingNote) return;
+    
+    try {
+      setIsCreatingNote(true);
+      // Fetch latest notes to ensure we have the most up-to-date list
+      await fetchNotes();
+      
+      // Find the highest Untitled_X number in existing notes
+      const untitledNotes = notes.filter(note => note.title.startsWith('Untitled_'));
+      const numbers = untitledNotes.map(note => {
+        const match = note.title.match(/Untitled_(\d+)/);
+        return match ? parseInt(match[1]) : 0;
+      });
+      const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
+      const newTitle = `Untitled_${nextNumber}`;
 
-    const response = await fetch('/api/notes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: newTitle, content: '' }),
-    });
-    const newNote = await response.json();
-    // Add isNew flag to the note
-    const noteWithFlag = { ...newNote, isNew: true };
-    setNotes(prevNotes => [noteWithFlag, ...prevNotes]);
-    setSelectedNote(noteWithFlag);
-    setTitle(newNote.title);
-    setContent(newNote.content || '');
-    setIsAddingNote(true);
+      const response = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle, content: '' }),
+      });
+      const newNote = await response.json();
+      // Add isNew flag to the note
+      const noteWithFlag = { ...newNote, isNew: true };
+      setNotes(prevNotes => [noteWithFlag, ...prevNotes]);
+      setSelectedNote(noteWithFlag);
+      setTitle(newNote.title);
+      setContent(newNote.content || '');
+      setIsAddingNote(true);
+    } finally {
+      setIsCreatingNote(false);
+    }
   };
 
-  const updateNote = async (id: string, content: string, highlights: Highlight[]) => {
+  const updateNote = async (id: string, content: string, highlights: Highlight[], title: string) => {
     const response = await fetch('/api/notes', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, content, highlights }),
+      body: JSON.stringify({ id, content, highlights, title }),
     });
     const updatedNote = await response.json();
     setNotes(prevNotes => 
@@ -100,8 +113,13 @@ export default function NotesPage() {
         selectedNote={selectedNote}
         onNoteSelect={setSelectedNote}
         onAddNote={createBlankNote}
+        onExpand={setIsSidebarExpanded}
       />
-      <div className="flex-1 flex flex-col h-full overflow-hidden ">
+      <div 
+        className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out ${
+          isSidebarExpanded ? 'ml-64' : 'ml-16'
+        }`}
+      >
         <NoteContent
           selectedNote={selectedNote}
           onDelete={deleteNote}

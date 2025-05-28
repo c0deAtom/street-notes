@@ -16,7 +16,7 @@ interface Note {
 interface NoteContentProps {
   selectedNote: Note | null;
   onDelete: (id: string) => void;
-  onUpdate: (id: string, content: string, highlights: { word: string }[]) => void;
+  onUpdate: (id: string, content: string, highlights: { word: string }[], title: string) => void;
   onNoteSelect: (note: Note | null) => void;
 }
 
@@ -116,17 +116,17 @@ export function NoteContent({ selectedNote, onDelete, onUpdate, onNoteSelect }: 
     onDelete(id);
   };
 
-  const handleUpdate = (id: string, content: string, highlights: { word: string }[]) => {
+  const handleUpdate = (id: string, content: string, highlights: { word: string }[], title: string) => {
     // Update local state
     setOpenNotes(prev => 
       prev.map(note => 
         note.id === id 
-          ? { ...note, content, highlights, isNew: false }
+          ? { ...note, content, highlights, title }
           : note
       )
     );
     // Call parent's onUpdate
-    onUpdate(id, content, highlights);
+    onUpdate(id, content, highlights, title);
     // Exit edit mode after update
     setEditingNoteId(null);
   };

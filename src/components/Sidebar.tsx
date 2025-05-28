@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 
@@ -18,29 +18,26 @@ interface SidebarProps {
   selectedNote: Note | null;
   onNoteSelect: (note: Note) => void;
   onAddNote: () => void;
+  onExpand?: (expanded: boolean) => void;
 }
 
-export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote }: SidebarProps) {
+export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand }: SidebarProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const handleExpand = (expanded: boolean) => {
+    setIsExpanded(expanded);
+    onExpand?.(expanded);
+  };
 
   return (
     <div 
-      className={`relative transition-all duration-300 ease-in-out h-full ${
-        isExpanded ? 'w-80' : 'w-16'
+      className={`absolute left-0 top-0 h-full transition-all duration-300 ease-in-out z-10 ${
+        isExpanded ? 'w-64' : 'w-16'
       }`}
-      onMouseEnter={() => setIsExpanded(true)}
-      onMouseLeave={() => setIsExpanded(false)}
+      onMouseEnter={() => handleExpand(true)}
+      onMouseLeave={() => handleExpand(false)}
     >
-      <div className="absolute right-0 top-1/2 -translate-y-1/2 z-10">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 rounded-full bg-background border shadow-sm"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          {isExpanded ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </Button>
-      </div>
+    
       <div className="h-full border-r bg-background overflow-hidden flex flex-col">
         <div className="p-2 border-b">
           <Button 
@@ -59,11 +56,11 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote }: Sideba
                 key={note.id} 
                 className={`cursor-pointer transition-colors ${
                   selectedNote?.id === note.id ? 'bg-accent' : ''
-                }`}
+                } ${!isExpanded ? 'w-12 mx-auto ' : 'w-full'}`}
                 onClick={() => onNoteSelect(note)}
               >
-                <CardHeader className="p-3">
-                  <CardTitle className={`text-lg truncate ${!isExpanded && 'text-center'}`}>
+                <CardHeader className={`p-3 h-2 ${!isExpanded ? 'px-2' : ''}`}>
+                  <CardTitle className={`text-lg truncate ${!isExpanded ? 'text-center' : ''}`}>
                     {isExpanded ? note.title : note.title.charAt(0)}
                   </CardTitle>
                 </CardHeader>

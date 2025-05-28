@@ -27,10 +27,10 @@ export async function DELETE(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const { id, highlights, content } = await request.json();
+  const { id, highlights, content, title } = await request.json();
   const note = await prisma.note.update({
     where: { id },
-    data: { highlights, content },
+    data: { highlights, content, title },
   });
   return NextResponse.json(note);
 } 
