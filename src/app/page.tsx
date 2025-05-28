@@ -18,6 +18,7 @@ export default function Home() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [highlightedWord, setHighlightedWord] = useState<string | null>(null);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchNotes();
@@ -49,22 +50,24 @@ export default function Home() {
     fetchNotes();
   };
 
-  const handleMouseDown = (word: string) => {
+  const handleMouseDown = (word: string, noteId: string) => {
     setHighlightedWord(word);
+    setSelectedNoteId(noteId);
   };
 
   const handleMouseUp = async () => {
-    if (highlightedWord) {
-      const noteId = notes[0]?.id; // Assuming you want to save to the first note
-      if (noteId) {
+    if (highlightedWord && selectedNoteId) {
+      const note = notes.find(n => n.id === selectedNoteId);
+      if (note) {
         await fetch('/api/notes', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: noteId, highlights: [...notes[0].highlights, highlightedWord] }),
+          body: JSON.stringify({ id: selectedNoteId, highlights: [...note.highlights, highlightedWord] }),
         });
         fetchNotes();
       }
       setHighlightedWord(null);
+      setSelectedNoteId(null);
     }
   };
 
@@ -93,7 +96,18 @@ export default function Home() {
               <CardTitle>{note.title}</CardTitle>
             </CardHeader>
             <CardContent>
-              <p>{note.content}</p>
+              <p>
+                {note.content?.split(' ').map((word, index) => (
+                  <span
+                    key={index}
+                    onMouseDown={() => handleMouseDown(word, note.id)}
+                    onMouseUp={handleMouseUp}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {word}{' '}
+                  </span>
+                ))}
+              </p>
               <p className="mt-2">
                 <strong>Highlights:</strong> {note.highlights.join(', ')}
               </p>
@@ -103,12 +117,6 @@ export default function Home() {
             </CardContent>
           </Card>
         ))}
-      </div>
-      <div className="mt-4">
-        <p>Click and hold to highlight a word:</p>
-        <p onMouseDown={() => handleMouseDown('example')} onMouseUp={handleMouseUp}>
-          This is an example sentence.
-        </p>
       </div>
     </div>
   );
