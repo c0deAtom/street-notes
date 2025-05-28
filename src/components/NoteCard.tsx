@@ -1,4 +1,6 @@
-import { useState } from 'react';
+'use client'
+
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditNote } from '@/components/EditNote';
@@ -18,12 +20,18 @@ interface NoteCardProps {
   note: Note;
   onDelete: (id: string) => void;
   onUpdate: (id: string, content: string, highlights: Highlight[]) => void;
+  isEditing?: boolean;
 }
 
-export function NoteCard({ note, onDelete, onUpdate }: NoteCardProps) {
-  const [isEditing, setIsEditing] = useState(false);
+export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing = false }: NoteCardProps) {
+  const [isEditing, setIsEditing] = useState(initialIsEditing);
   const [highlightedWord, setHighlightedWord] = useState<string | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+
+  // Update isEditing state when prop changes
+  useEffect(() => {
+    setIsEditing(initialIsEditing);
+  }, [initialIsEditing]);
 
   const handleMouseDown = (word: string, noteId: string) => {
     setHighlightedWord(word);

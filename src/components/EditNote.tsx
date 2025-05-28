@@ -30,39 +30,36 @@ export function EditNote({ note, onSave, onCancel }: EditNoteProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Edit Note</CardTitle>
+        <CardTitle>
+          <div className='flex justify-between items-center'>
+            <Input
+              value={title}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
+              placeholder="Enter note title"
+              className="h-8 text-lg font-semibold"
+            />
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onCancel}>
+                Cancel
+              </Button>
+              <Button onClick={handleSave}>
+                Save
+              </Button>
+            </div>
+          </div>
+        </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <label htmlFor="title" className="text-sm font-medium">
-            Title
-          </label>
-          <Input
-            id="title"
-            value={title}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
-            placeholder="Enter note title"
-          />
-        </div>
-        <div className="space-y-2">
-          <label htmlFor="content" className="text-sm font-medium">
-            Content
-          </label>
+      <CardContent>
+        <div className="space-y-4">
           <Textarea
-            id="content"
             value={content}
             onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
             placeholder="Enter note content"
-            className="min-h-[200px]"
+            className="min-h-[200px] resize-none"
           />
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave}>
-            Save Changes
-          </Button>
+          <p className="mt-2">
+            <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
+          </p>
         </div>
       </CardContent>
     </Card>
