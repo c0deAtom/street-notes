@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { EditNote } from '@/components/EditNote';
 
 interface Highlight {
   word: string;
@@ -21,8 +21,7 @@ interface NoteCardProps {
 }
 
 export function NoteCard({ note, onDelete, onUpdate }: NoteCardProps) {
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [editingContent, setEditingContent] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
   const [highlightedWord, setHighlightedWord] = useState<string | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
@@ -40,62 +39,55 @@ export function NoteCard({ note, onDelete, onUpdate }: NoteCardProps) {
     }
   };
 
-  const startEditing = () => {
-    setEditingNoteId(note.id);
-    setEditingContent(note.content || '');
+  const handleSave = (id: string, title: string, content: string) => {
+    const updatedHighlights = note.highlights.filter(highlight => 
+      content.includes(highlight.word)
+    );
+    onUpdate(id, content, updatedHighlights);
+    setIsEditing(false);
   };
 
-  const saveEdit = async () => {
-    if (editingNoteId) {
-      const updatedHighlights = note.highlights.filter(highlight => 
-        editingContent.includes(highlight.word)
-      );
-      onUpdate(editingNoteId, editingContent, updatedHighlights);
-      setEditingNoteId(null);
-    }
-  };
+  if (isEditing) {
+    return (
+      <EditNote
+        note={note}
+        onSave={handleSave}
+        onCancel={() => setIsEditing(false)}
+      />
+    );
+  }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{note.title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {editingNoteId === note.id ? (
-          <div>
-            <Input
-              value={editingContent}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingContent(e.target.value)}
-              className="mb-2"
-            />
-            <Button onClick={saveEdit}>Save</Button>
-          </div>
-        ) : (
-          <p>
-            {note.content?.split(' ').map((word, index) => (
-              <span
-                key={index}
-                onMouseDown={() => handleMouseDown(word, note.id)}
-                onMouseUp={handleMouseUp}
-                style={{ 
-                  cursor: 'pointer', 
-                  backgroundColor: note.highlights.some(h => h.word === word) ? 'yellow' : 'transparent' 
-                }}
-              >
-                {word}{' '}
-              </span>
-            ))}
-          </p>
-        )}
-        <p className="mt-2">
-          <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
-        </p>
-        <div className="flex gap-2 mt-4">
+        <CardTitle><div className='flex justify-between items-center'>{note.title}   <div className="flex gap-2 ">
           <Button variant="destructive" onClick={() => onDelete(note.id)}>
             Delete
           </Button>
-          <Button onClick={startEditing}>Edit</Button>
-        </div>
+          <Button onClick={() => setIsEditing(true)}>Edit</Button>
+        </div></div></CardTitle>
+        
+      </CardHeader>
+      <CardContent>
+        <p>
+          {note.content?.split(' ').map((word, index) => (
+            <span
+              key={index}
+              onMouseDown={() => handleMouseDown(word, note.id)}
+              onMouseUp={handleMouseUp}
+              style={{ 
+                cursor: 'pointer', 
+                backgroundColor: note.highlights.some(h => h.word === word) ? 'yellow' : 'transparent' 
+              }}
+            >
+              {word}{' '}
+            </span>
+          ))}
+        </p>
+        <p className="mt-2">
+          <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
+        </p>
+      
       </CardContent>
     </Card>
   );

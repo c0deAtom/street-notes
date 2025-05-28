@@ -49,7 +49,7 @@ export default function NotesPage() {
       body: JSON.stringify({ title: 'New Note', content: '' }),
     });
     const newNote = await response.json();
-    setNotes(prevNotes => [...prevNotes, newNote]);
+    setNotes(prevNotes => [newNote, ...prevNotes]);
     setSelectedNote(newNote);
     setTitle(newNote.title);
     setContent(newNote.content || '');
