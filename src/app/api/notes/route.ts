@@ -23,10 +23,10 @@ export async function DELETE(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const { id, highlights } = await request.json();
+  const { id, highlights, content } = await request.json();
   const note = await prisma.note.update({
     where: { id },
-    data: { highlights },
+    data: { highlights, content },
   });
   return NextResponse.json(note);
 } 

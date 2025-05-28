@@ -6,11 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Image from "next/image";
 
+interface Highlight {
+  word: string;
+}
+
 interface Note {
   id: string;
   title: string;
   content: string | null;
-  highlights: string[];
+  highlights: Highlight[];
 }
 
 export default function Home() {
@@ -19,6 +23,8 @@ export default function Home() {
   const [content, setContent] = useState('');
   const [highlightedWord, setHighlightedWord] = useState<string | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState('');
 
   useEffect(() => {
     fetchNotes();
@@ -59,15 +65,37 @@ export default function Home() {
     if (highlightedWord && selectedNoteId) {
       const note = notes.find(n => n.id === selectedNoteId);
       if (note) {
+        const newHighlight: Highlight = { word: highlightedWord };
         await fetch('/api/notes', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: selectedNoteId, highlights: [...note.highlights, highlightedWord] }),
+          body: JSON.stringify({ id: selectedNoteId, highlights: [...note.highlights, newHighlight] }),
         });
         fetchNotes();
       }
       setHighlightedWord(null);
       setSelectedNoteId(null);
+    }
+  };
+
+  const startEditing = (note: Note) => {
+    setEditingNoteId(note.id);
+    setEditingContent(note.content || '');
+  };
+
+  const saveEdit = async () => {
+    if (editingNoteId) {
+      const note = notes.find(n => n.id === editingNoteId);
+      if (note) {
+        const updatedHighlights = note.highlights.filter(highlight => editingContent.includes(highlight.word));
+        await fetch('/api/notes', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: editingNoteId, content: editingContent, highlights: updatedHighlights }),
+        });
+        setEditingNoteId(null);
+        fetchNotes();
+      }
     }
   };
 
@@ -96,24 +124,36 @@ export default function Home() {
               <CardTitle>{note.title}</CardTitle>
             </CardHeader>
             <CardContent>
-              <p>
-                {note.content?.split(' ').map((word, index) => (
-                  <span
-                    key={index}
-                    onMouseDown={() => handleMouseDown(word, note.id)}
-                    onMouseUp={handleMouseUp}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    {word}{' '}
-                  </span>
-                ))}
-              </p>
+              {editingNoteId === note.id ? (
+                <div>
+                  <Input
+                    value={editingContent}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingContent(e.target.value)}
+                    className="mb-2"
+                  />
+                  <Button onClick={saveEdit}>Save</Button>
+                </div>
+              ) : (
+                <p>
+                  {note.content?.split(' ').map((word, index) => (
+                    <span
+                      key={index}
+                      onMouseDown={() => handleMouseDown(word, note.id)}
+                      onMouseUp={handleMouseUp}
+                      style={{ cursor: 'pointer', backgroundColor: note.highlights.some(h => h.word === word) ? 'yellow' : 'transparent' }}
+                    >
+                      {word}{' '}
+                    </span>
+                  ))}
+                </p>
+              )}
               <p className="mt-2">
-                <strong>Highlights:</strong> {note.highlights.join(', ')}
+                <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
               </p>
               <Button variant="destructive" onClick={() => deleteNote(note.id)}>
                 Delete
               </Button>
+              <Button onClick={() => startEditing(note)}>Edit</Button>
             </CardContent>
           </Card>
         ))}
