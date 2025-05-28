@@ -1,13 +1,26 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditNote } from '@/components/EditNote';
-import { Volume2 } from 'lucide-react';
+import { MoreVertical, Trash2, Edit2, Play, Pause, Rewind, FastForward, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { audioStorage } from '@/lib/audioStorage';
 import crypto from 'crypto';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { createPortal } from 'react-dom';
+import { cn } from "@/lib/utils";
 
 interface Highlight {
   word: string;
@@ -27,6 +40,11 @@ interface NoteCardProps {
   isEditing?: boolean;
 }
 
+interface QuizOption {
+  word: string;
+  isCorrect: boolean;
+}
+
 export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing = false }: NoteCardProps) {
   const [isEditing, setIsEditing] = useState(initialIsEditing);
   const [highlightedWords, setHighlightedWords] = useState<Set<string>>(new Set());
@@ -36,6 +54,20 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentContentHash, setCurrentContentHash] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isQuizMode, setIsQuizMode] = useState(false);
+  const [quizOptions, setQuizOptions] = useState<QuizOption[]>([]);
+  const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
+  const [revealedWords, setRevealedWords] = useState<Set<string>>(new Set());
+  const [wrongAnswers, setWrongAnswers] = useState<Set<string>>(new Set());
+  const optionsRef = useRef<HTMLDivElement>(null);
+  const [allWords] = useState<string[]>(() => {
+    const words = new Set<string>();
+    note.highlights.forEach(h => words.add(h.word));
+    return Array.from(words);
+  });
 
   // Check for existing audio in browser storage when note loads
   useEffect(() => {
@@ -102,23 +134,66 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
     }
   };
 
-  const handlePlayAudio = () => {
+  const handlePlayAudio = async () => {
+    if (!audioUrl) {
+      if (!note.content) return;
+      try {
+        await generateAudio(note.content);
+        return;
+      } catch (error) {
+        toast.error('Failed to generate audio');
+        return;
+      }
+    }
+
+    if (!audioRef.current) {
+      audioRef.current = new Audio(audioUrl);
+    }
+
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleSeek = (seconds: number) => {
+    if (!audioRef.current) return;
+    const newTime = audioRef.current.currentTime + seconds;
+    audioRef.current.currentTime = Math.max(0, Math.min(newTime, audioRef.current.duration));
+  };
+
+  // Update audio event listeners when audioUrl changes
+  useEffect(() => {
     if (!audioUrl) return;
 
-    const audio = new Audio(audioUrl);
-    setIsPlaying(true);
-    
-    audio.onended = () => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio(audioUrl);
+    }
+
+    const audio = audioRef.current;
+
+    const handleEnded = () => {
       setIsPlaying(false);
+      audio.currentTime = 0;
     };
 
-    audio.onerror = () => {
+    const handleError = () => {
       toast.error('Failed to play audio');
       setIsPlaying(false);
     };
 
-    audio.play();
-  };
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
+
+    return () => {
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
+      audio.pause();
+      audio.currentTime = 0;
+    };
+  }, [audioUrl]);
 
   const handleDelete = async () => {
     try {
@@ -226,6 +301,59 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
     };
   }, [audioUrl]);
 
+  const generateQuizOptions = (correctWord: string) => {
+    const otherWords = allWords.filter(word => word !== correctWord);
+    const randomWords = otherWords
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3);
+    
+    const options = [
+      { word: correctWord, isCorrect: true },
+      ...randomWords.map(word => ({ word, isCorrect: false }))
+    ].sort(() => Math.random() - 0.5);
+
+    setQuizOptions(options);
+  };
+
+  const handleWordClick = (word: string, element: HTMLSpanElement) => {
+    if (!isQuizMode) return;
+    const rect = element.getBoundingClientRect();
+    setPopoverPosition({
+      x: rect.left,
+      y: rect.bottom + window.scrollY
+    });
+    setSelectedWord(word);
+    generateQuizOptions(word);
+  };
+
+  const handleOptionSelect = (option: QuizOption) => {
+    if (option.isCorrect) {
+      toast.success('Correct!');
+      setRevealedWords(prev => new Set([...prev, selectedWord!]));
+      setSelectedWord(null);
+      setPopoverPosition(null);
+      setWrongAnswers(new Set());
+    } else {
+      toast.error('Incorrect!');
+      setWrongAnswers(prev => new Set([...prev, option.word]));
+    }
+  };
+
+  // Add click outside handler
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popoverPosition && optionsRef.current && !optionsRef.current.contains(event.target as Node)) {
+        setSelectedWord(null);
+        setPopoverPosition(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [popoverPosition]);
+
   if (isEditing) {
     return (
       <EditNote
@@ -237,49 +365,144 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <div className='flex justify-between items-center'>
-            {note.title}
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handlePlayAudio}
-                disabled={!audioUrl || isPlaying}
-              >
-                <Volume2 className={`h-4 w-4 ${isPlaying ? 'animate-pulse' : ''}`} />
-              </Button>
-              <Button variant="destructive" onClick={handleDelete}>
-                Delete
-              </Button>
-              <Button onClick={() => setIsEditing(true)}>Edit</Button>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <div className='flex justify-between items-center'>
+              {note.title}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => handleSeek(-10)}
+                    disabled={!audioUrl}
+                  >
+                    <Rewind className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handlePlayAudio}
+                    disabled={!note.content}
+                  >
+                    {isPlaying ? (
+                      <Pause className="h-4 w-4" />
+                    ) : (
+                      <Play className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => handleSeek(10)}
+                    disabled={!audioUrl}
+                  >
+                    <FastForward className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={isQuizMode ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => {
+                      setIsQuizMode(!isQuizMode);
+                      if (!isQuizMode) {
+                        setRevealedWords(new Set());
+                        setWrongAnswers(new Set());
+                      }
+                    }}
+                  >
+                    <BookOpen className="h-4 w-4" />
+                  </Button>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                      <Edit2 className="h-4 w-4 mr-2" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={handleDelete}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent onMouseLeave={handleMouseLeave}>
+          <p>
+            {note.content?.split(' ').map((word, index) => {
+              const isHighlighted = note.highlights.some(h => h.word === word);
+              const shouldHide = isQuizMode && isHighlighted && !revealedWords.has(word);
+              
+              return (
+                <span
+                  key={index}
+                  onMouseDown={() => handleMouseDown(word, note.id)}
+                  onMouseUp={handleMouseUp}
+                  onClick={(e) => handleWordClick(word, e.currentTarget)}
+                  style={{ 
+                    cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
+                    backgroundColor: isHighlighted ? 'yellow' : 'transparent',
+                    opacity: highlightedWords.has(word) ? 0.7 : 1,
+                    color: shouldHide ? 'transparent' : 'inherit',
+                    textDecoration: shouldHide ? 'underline' : 'none',
+                    userSelect: 'none'
+                  }}
+                >
+                  {word}{' '}
+                </span>
+              );
+            })}
+          </p>
+          <p className="mt-2">
+            <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
+          </p>
+        </CardContent>
+      </Card>
+
+      {popoverPosition && selectedWord && typeof window !== 'undefined' && createPortal(
+        <div
+          ref={optionsRef}
+          style={{
+            position: 'fixed',
+            left: popoverPosition.x,
+            top: popoverPosition.y,
+            zIndex: 50
+          }}
+        >
+          <div className="bg-white rounded-lg shadow-lg p-2 w-48">
+            <div className="grid gap-1">
+              {quizOptions.map((option, index) => (
+                <Button
+                  key={index}
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "justify-start text-sm w-full",
+                    wrongAnswers.has(option.word) && "bg-red-100 text-red-600 hover:bg-red-100 hover:text-red-600"
+                  )}
+                  onClick={() => handleOptionSelect(option)}
+                  disabled={wrongAnswers.has(option.word)}
+                >
+                  {option.word}
+                </Button>
+              ))}
             </div>
           </div>
-        </CardTitle>
-      </CardHeader>
-      <CardContent onMouseLeave={handleMouseLeave}>
-        <p>
-          {note.content?.split(' ').map((word, index) => (
-            <span
-              key={index}
-              onMouseDown={() => handleMouseDown(word, note.id)}
-              onMouseUp={handleMouseUp}
-              style={{ 
-                cursor: 'pointer', 
-                backgroundColor: note.highlights.some(h => h.word === word) ? 'yellow' : 'transparent',
-                opacity: highlightedWords.has(word) ? 0.7 : 1
-              }}
-            >
-              {word}{' '}
-            </span>
-          ))}
-        </p>
-        <p className="mt-2">
-          <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
-        </p>
-      </CardContent>
-    </Card>
+        </div>,
+        document.body
+      )}
+    </>
   );
 } 
