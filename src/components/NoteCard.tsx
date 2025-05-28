@@ -35,6 +35,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
   const [isConverting, setIsConverting] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentContentHash, setCurrentContentHash] = useState<string | null>(null);
 
   // Check for existing audio in browser storage when note loads
   useEffect(() => {
@@ -42,6 +43,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
       if (!note.content) return;
       
       const contentHash = crypto.createHash('md5').update(note.content).digest('hex');
+      setCurrentContentHash(contentHash);
       const audioBlob = await audioStorage.getAudio(note.id, contentHash);
       
       if (audioBlob) {
@@ -56,6 +58,12 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
   const generateAudio = async (content: string) => {
     try {
       setIsConverting(true);
+      
+      // Delete old audio if it exists
+      if (currentContentHash) {
+        await audioStorage.deleteAudio(note.id);
+      }
+
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: {
@@ -84,6 +92,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
       // Create URL for playback
       const url = URL.createObjectURL(audioBlob);
       setAudioUrl(url);
+      setCurrentContentHash(contentHash);
       toast.success('Audio generated successfully');
     } catch (error) {
       console.error('Text-to-speech error:', error);
@@ -115,6 +124,13 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
     try {
       // Delete audio from browser storage
       await audioStorage.deleteAudio(note.id);
+      
+      // Clean up the current audio URL
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+        setAudioUrl(null);
+      }
+      setCurrentContentHash(null);
       
       // Then delete the note
       onDelete(note.id);
