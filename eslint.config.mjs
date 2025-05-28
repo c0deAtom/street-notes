@@ -17,7 +17,10 @@ const eslintConfig = [
     "plugin:prisma/recommended"
   ),
   {
-    plugins: ["@typescript-eslint", "prisma"],
+    plugins: {
+      "@typescript-eslint": {},
+      "prisma": {}
+    },
     rules: {
       // Add or override rules here if needed
     },
