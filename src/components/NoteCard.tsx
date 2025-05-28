@@ -441,9 +441,10 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
         </CardHeader>
         <CardContent onMouseLeave={handleMouseLeave}>
           <p>
-            {note.content?.split(' ').map((word, index) => {
+            {note.content?.split(' ').map((word, index, array) => {
               const isHighlighted = note.highlights.some(h => h.word === word);
               const shouldHide = isQuizMode && isHighlighted && !revealedWords.has(word);
+              const isLastWord = index === array.length - 1;
               
               return (
                 <span
@@ -457,10 +458,13 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
                     opacity: highlightedWords.has(word) ? 0.7 : 1,
                     color: shouldHide ? 'transparent' : 'inherit',
                     textDecoration: shouldHide ? 'underline' : 'none',
-                    userSelect: 'none'
+                    userSelect: 'none',
+                    padding: isHighlighted ? '0 2px' : '0',
+                    margin: isHighlighted ? '0 1px' : '0',
+                    borderRadius: isHighlighted ? '2px' : '0'
                   }}
                 >
-                  {word}{' '}
+                  {word}{!isLastWord && ' '}
                 </span>
               );
             })}

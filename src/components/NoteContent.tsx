@@ -155,8 +155,8 @@ export function NoteContent({ selectedNote, onDelete, onUpdate, onNoteSelect }: 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <div className="border-b px-4">
-          <TabsList className="w-full justify-start">
+        <div className="border-b ">
+          <TabsList className="w-full justify-start ">
             {openNotes.map((note) => (
               <TabsTrigger
                 key={note.id}
