@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditNote } from '@/components/EditNote';
 import { Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { audioStorage } from '@/lib/audioStorage';
+import crypto from 'crypto';
 
 interface Highlight {
   word: string;
@@ -34,34 +36,22 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // Check for existing audio file when note loads
+  // Check for existing audio in browser storage when note loads
   useEffect(() => {
     const checkExistingAudio = async () => {
       if (!note.content) return;
       
-      try {
-        const response = await fetch('/api/tts', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            text: note.content,
-            noteId: note.id
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setAudioUrl(data.audioPath);
-        }
-      } catch (error) {
-        console.error('Error checking audio file:', error);
+      const contentHash = crypto.createHash('md5').update(note.content).digest('hex');
+      const audioBlob = await audioStorage.getAudio(note.id, contentHash);
+      
+      if (audioBlob) {
+        const url = URL.createObjectURL(audioBlob);
+        setAudioUrl(url);
       }
     };
 
     checkExistingAudio();
-  }, [note.id]);
+  }, [note.id, note.content]);
 
   const generateAudio = async (content: string) => {
     try {
@@ -81,8 +71,19 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
         throw new Error('Failed to convert text to speech');
       }
 
-      const data = await response.json();
-      setAudioUrl(data.audioPath);
+      const contentHash = response.headers.get('X-Content-Hash');
+      if (!contentHash) {
+        throw new Error('Content hash not found in response');
+      }
+
+      const audioBlob = await response.blob();
+      
+      // Save to browser storage
+      await audioStorage.saveAudio(note.id, contentHash, audioBlob);
+      
+      // Create URL for playback
+      const url = URL.createObjectURL(audioBlob);
+      setAudioUrl(url);
       toast.success('Audio generated successfully');
     } catch (error) {
       console.error('Text-to-speech error:', error);
@@ -108,6 +109,19 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
     };
 
     audio.play();
+  };
+
+  const handleDelete = async () => {
+    try {
+      // Delete audio from browser storage
+      await audioStorage.deleteAudio(note.id);
+      
+      // Then delete the note
+      onDelete(note.id);
+    } catch (error) {
+      console.error('Error deleting note:', error);
+      toast.error('Failed to delete note');
+    }
   };
 
   // Update isEditing state when prop changes
@@ -181,11 +195,20 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
     onUpdate(id, content, updatedHighlights, title);
     setIsEditing(false);
     
-    // Generate audio only after content is edited and saved
+    // Generate new audio after content is edited
     if (content) {
       await generateAudio(content);
     }
   };
+
+  // Clean up object URLs when component unmounts
+  useEffect(() => {
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
 
   if (isEditing) {
     return (
@@ -212,7 +235,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
               >
                 <Volume2 className={`h-4 w-4 ${isPlaying ? 'animate-pulse' : ''}`} />
               </Button>
-              <Button variant="destructive" onClick={() => onDelete(note.id)}>
+              <Button variant="destructive" onClick={handleDelete}>
                 Delete
               </Button>
               <Button onClick={() => setIsEditing(true)}>Edit</Button>

@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server';
-import { writeFile, access } from 'fs/promises';
-import path from 'path';
 import crypto from 'crypto';
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
@@ -18,22 +16,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'ElevenLabs API key not configured' }, { status: 500 });
     }
 
-    // Generate a unique filename based on noteId and content hash
+    // Generate a unique hash for the content
     const contentHash = crypto.createHash('md5').update(text).digest('hex');
-    const filename = `${noteId}_${contentHash}.mp3`;
-    const filePath = path.join(process.cwd(), 'public', 'audio', filename);
-
-    // Check if file already exists
-    try {
-      await access(filePath);
-      // If file exists, return the path
-      return NextResponse.json({ 
-        audioPath: `/audio/${filename}`,
-        message: 'Using cached audio file'
-      });
-    } catch (error) {
-      // File doesn't exist, continue with generation
-    }
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
@@ -61,13 +45,14 @@ export async function POST(req: Request) {
     }
 
     const audioBuffer = await response.arrayBuffer();
-    
-    // Save the audio file
-    await writeFile(filePath, Buffer.from(audioBuffer));
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
 
-    return NextResponse.json({ 
-      audioPath: `/audio/${filename}`,
-      message: 'Audio file generated successfully'
+    return new NextResponse(audioBlob, {
+      headers: {
+        'Content-Type': 'audio/mpeg',
+        'Content-Disposition': 'attachment; filename="speech.mp3"',
+        'X-Content-Hash': contentHash,
+      },
     });
   } catch (error) {
     console.error('Text-to-speech error:', error);
