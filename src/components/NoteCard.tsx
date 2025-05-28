@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditNote } from '@/components/EditNote';
-import { MoreVertical, Trash2, Edit2, Play, Pause, Rewind, FastForward, BookOpen } from 'lucide-react';
+import { MoreVertical, Trash2, Edit2, Play, Pause, Rewind, FastForward, BookOpen, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { audioStorage } from '@/lib/audioStorage';
 import crypto from 'crypto';
@@ -45,6 +45,13 @@ interface QuizOption {
   isCorrect: boolean;
 }
 
+interface AudioMetadata {
+  noteId: string;
+  contentHash: string;
+  timestamp: number;
+  title: string;
+}
+
 export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing = false }: NoteCardProps) {
   const [isEditing, setIsEditing] = useState(initialIsEditing);
   const [highlightedWords, setHighlightedWords] = useState<Set<string>>(new Set());
@@ -68,33 +75,60 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
     note.highlights.forEach(h => words.add(h.word));
     return Array.from(words);
   });
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isAudioReady, setIsAudioReady] = useState(false);
+  const [audioMetadata, setAudioMetadata] = useState<AudioMetadata | null>(null);
+
+  const generateContentHash = (content: string) => {
+    return crypto.createHash('sha256')
+      .update(content.trim().toLowerCase())
+      .digest('hex');
+  };
 
   // Check for existing audio in browser storage when note loads
   useEffect(() => {
     const checkExistingAudio = async () => {
       if (!note.content) return;
       
-      const contentHash = crypto.createHash('md5').update(note.content).digest('hex');
-      setCurrentContentHash(contentHash);
-      const audioBlob = await audioStorage.getAudio(note.id, contentHash);
+      const contentHash = generateContentHash(note.content);
+      const metadata: AudioMetadata = {
+        noteId: note.id,
+        contentHash,
+        timestamp: Date.now(),
+        title: note.title
+      };
+
+      const audioBlob = await audioStorage.getAudio(metadata);
       
       if (audioBlob) {
         const url = URL.createObjectURL(audioBlob);
         setAudioUrl(url);
+        setCurrentContentHash(contentHash);
+        setAudioMetadata(metadata);
+        setIsAudioReady(true);
       }
     };
 
     checkExistingAudio();
-  }, [note.id, note.content]);
+  }, [note.id, note.content, note.title]);
 
   const generateAudio = async (content: string) => {
     try {
-      setIsConverting(true);
+      setIsProcessing(true);
+      setIsAudioReady(false);
       
       // Delete old audio if it exists
       if (currentContentHash) {
         await audioStorage.deleteAudio(note.id);
       }
+
+      const contentHash = generateContentHash(content);
+      const metadata: AudioMetadata = {
+        noteId: note.id,
+        contentHash,
+        timestamp: Date.now(),
+        title: note.title
+      };
 
       const response = await fetch('/api/tts', {
         method: 'POST',
@@ -103,7 +137,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
         },
         body: JSON.stringify({ 
           text: content,
-          noteId: note.id
+          metadata
         }),
       });
 
@@ -111,26 +145,23 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
         throw new Error('Failed to convert text to speech');
       }
 
-      const contentHash = response.headers.get('X-Content-Hash');
-      if (!contentHash) {
-        throw new Error('Content hash not found in response');
-      }
-
       const audioBlob = await response.blob();
       
-      // Save to browser storage
-      await audioStorage.saveAudio(note.id, contentHash, audioBlob);
+      // Save to browser storage with metadata
+      await audioStorage.saveAudio(metadata, audioBlob);
       
       // Create URL for playback
       const url = URL.createObjectURL(audioBlob);
       setAudioUrl(url);
       setCurrentContentHash(contentHash);
+      setAudioMetadata(metadata);
+      setIsAudioReady(true);
       toast.success('Audio generated successfully');
     } catch (error) {
       console.error('Text-to-speech error:', error);
       toast.error('Failed to generate audio');
     } finally {
-      setIsConverting(false);
+      setIsProcessing(false);
     }
   };
 
@@ -198,7 +229,9 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
   const handleDelete = async () => {
     try {
       // Delete audio from browser storage
-      await audioStorage.deleteAudio(note.id);
+      if (audioMetadata) {
+        await audioStorage.deleteAudio(audioMetadata.noteId);
+      }
       
       // Clean up the current audio URL
       if (audioUrl) {
@@ -206,6 +239,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
         setAudioUrl(null);
       }
       setCurrentContentHash(null);
+      setAudioMetadata(null);
       
       // Then delete the note
       onDelete(note.id);
@@ -377,7 +411,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
                     variant="outline"
                     size="icon"
                     onClick={() => handleSeek(-10)}
-                    disabled={!audioUrl}
+                    disabled={!audioUrl || isProcessing}
                   >
                     <Rewind className="h-4 w-4" />
                   </Button>
@@ -385,9 +419,11 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
                     variant="outline"
                     size="icon"
                     onClick={handlePlayAudio}
-                    disabled={!note.content}
+                    disabled={!note.content || isProcessing}
                   >
-                    {isPlaying ? (
+                    {isProcessing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : isPlaying ? (
                       <Pause className="h-4 w-4" />
                     ) : (
                       <Play className="h-4 w-4" />
@@ -397,7 +433,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
                     variant="outline"
                     size="icon"
                     onClick={() => handleSeek(10)}
-                    disabled={!audioUrl}
+                    disabled={!audioUrl || isProcessing}
                   >
                     <FastForward className="h-4 w-4" />
                   </Button>
