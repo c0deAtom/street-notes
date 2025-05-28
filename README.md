@@ -34,3 +34,32 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Setup
+
+### 1. Install dependencies
+```
+npm install
+```
+
+### 2. Set up the database
+- Ensure your `.env` file has the correct `DATABASE_URL` for Neon DB.
+- Run Prisma migrations:
+```
+npx prisma migrate dev --name init
+```
+
+### 3. Generate Prisma Client
+```
+npx prisma generate
+```
+
+### 4. Lint your code
+```
+npm run lint
+```
+
+---
+
+- Prisma schema is in `prisma/schema.prisma`.
+- Prisma client utility is in `src/lib/prisma.ts`.
