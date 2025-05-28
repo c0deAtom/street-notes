@@ -10,15 +10,17 @@ interface Note {
   title: string;
   content: string | null;
   highlights: { word: string }[];
+  isNew?: boolean;
 }
 
 interface NoteContentProps {
   selectedNote: Note | null;
   onDelete: (id: string) => void;
   onUpdate: (id: string, content: string, highlights: { word: string }[]) => void;
+  onNoteSelect: (note: Note | null) => void;
 }
 
-export function NoteContent({ selectedNote, onDelete, onUpdate }: NoteContentProps) {
+export function NoteContent({ selectedNote, onDelete, onUpdate, onNoteSelect }: NoteContentProps) {
   const [isClient, setIsClient] = useState(false);
   const [openNotes, setOpenNotes] = useState<Note[]>([]);
   const [activeTab, setActiveTab] = useState<string>('');
@@ -61,14 +63,17 @@ export function NoteContent({ selectedNote, onDelete, onUpdate }: NoteContentPro
         // Update the note content if it has changed
         setOpenNotes(prev => 
           prev.map(note => 
-            note.id === selectedNote.id ? selectedNote : note
+            note.id === selectedNote.id ? { ...selectedNote, isNew: false } : note
           )
         );
       } else {
-        // If note is not open, add it to tabs and set it to edit mode
-        setOpenNotes(prev => [...prev, selectedNote]);
+        // If note is not open, add it to tabs
+        setOpenNotes(prev => [...prev, { ...selectedNote, isNew: false }]);
         setActiveTab(selectedNote.id);
-        setEditingNoteId(selectedNote.id);
+        // Only set edit mode if this is a newly created note
+        if (selectedNote.isNew) {
+          setEditingNoteId(selectedNote.id);
+        }
       }
     }
   }, [selectedNote]);
@@ -77,7 +82,13 @@ export function NoteContent({ selectedNote, onDelete, onUpdate }: NoteContentPro
     setOpenNotes(prev => prev.filter(note => note.id !== noteId));
     if (activeTab === noteId) {
       const remainingNotes = openNotes.filter(note => note.id !== noteId);
-      setActiveTab(remainingNotes.length > 0 ? remainingNotes[0].id : '');
+      if (remainingNotes.length > 0) {
+        setActiveTab(remainingNotes[0].id);
+        onNoteSelect(remainingNotes[0]);
+      } else {
+        setActiveTab('');
+        onNoteSelect(null);
+      }
     }
     if (editingNoteId === noteId) {
       setEditingNoteId(null);
@@ -90,7 +101,13 @@ export function NoteContent({ selectedNote, onDelete, onUpdate }: NoteContentPro
     // Update active tab if needed
     if (activeTab === id) {
       const remainingNotes = openNotes.filter(note => note.id !== id);
-      setActiveTab(remainingNotes.length > 0 ? remainingNotes[0].id : '');
+      if (remainingNotes.length > 0) {
+        setActiveTab(remainingNotes[0].id);
+        onNoteSelect(remainingNotes[0]);
+      } else {
+        setActiveTab('');
+        onNoteSelect(null);
+      }
     }
     if (editingNoteId === id) {
       setEditingNoteId(null);
@@ -104,7 +121,7 @@ export function NoteContent({ selectedNote, onDelete, onUpdate }: NoteContentPro
     setOpenNotes(prev => 
       prev.map(note => 
         note.id === id 
-          ? { ...note, content, highlights }
+          ? { ...note, content, highlights, isNew: false }
           : note
       )
     );

@@ -25,7 +25,7 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote }: Sideba
 
   return (
     <div 
-      className={`absolute left-0 top-0 h-full transition-all duration-300 ease-in-out z-10 ${
+      className={`relative transition-all duration-300 ease-in-out h-full ${
         isExpanded ? 'w-80' : 'w-16'
       }`}
       onMouseEnter={() => setIsExpanded(true)}

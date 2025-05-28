@@ -40,8 +40,19 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
 
   const handleMouseUp = async () => {
     if (highlightedWord && selectedNoteId) {
-      const newHighlight: Highlight = { word: highlightedWord };
-      onUpdate(selectedNoteId, note.content || '', [...note.highlights, newHighlight]);
+      const isAlreadyHighlighted = note.highlights.some(h => h.word === highlightedWord);
+      let updatedHighlights;
+      
+      if (isAlreadyHighlighted) {
+        // Remove highlight if word is already highlighted
+        updatedHighlights = note.highlights.filter(h => h.word !== highlightedWord);
+      } else {
+        // Add highlight if word is not highlighted
+        const newHighlight: Highlight = { word: highlightedWord };
+        updatedHighlights = [...note.highlights, newHighlight];
+      }
+      
+      onUpdate(selectedNoteId, note.content || '', updatedHighlights);
       setHighlightedWord(null);
       setSelectedNoteId(null);
     }

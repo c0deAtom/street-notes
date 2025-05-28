@@ -43,14 +43,25 @@ export default function NotesPage() {
   };
 
   const createBlankNote = async () => {
+    // Find the highest Untitled_X number in existing notes
+    const untitledNotes = notes.filter(note => note.title.startsWith('Untitled_'));
+    const numbers = untitledNotes.map(note => {
+      const match = note.title.match(/Untitled_(\d+)/);
+      return match ? parseInt(match[1]) : 0;
+    });
+    const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
+    const newTitle = `Untitled_${nextNumber}`;
+
     const response = await fetch('/api/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'New Note', content: '' }),
+      body: JSON.stringify({ title: newTitle, content: '' }),
     });
     const newNote = await response.json();
-    setNotes(prevNotes => [newNote, ...prevNotes]);
-    setSelectedNote(newNote);
+    // Add isNew flag to the note
+    const noteWithFlag = { ...newNote, isNew: true };
+    setNotes(prevNotes => [noteWithFlag, ...prevNotes]);
+    setSelectedNote(noteWithFlag);
     setTitle(newNote.title);
     setContent(newNote.content || '');
     setIsAddingNote(true);
@@ -90,12 +101,12 @@ export default function NotesPage() {
         onNoteSelect={setSelectedNote}
         onAddNote={createBlankNote}
       />
-      <div className="flex-1 flex flex-col h-full overflow-hidden ml-16">
-       
+      <div className="flex-1 flex flex-col h-full overflow-hidden ">
         <NoteContent
           selectedNote={selectedNote}
           onDelete={deleteNote}
           onUpdate={updateNote}
+          onNoteSelect={setSelectedNote}
         />
       </div>
     </div>
