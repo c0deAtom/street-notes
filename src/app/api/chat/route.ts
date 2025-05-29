@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
+// Check for API key at startup
+if (!process.env.OPENAI_API_KEY) {
+  console.warn('Warning: OPENAI_API_KEY is not set in environment variables');
+}
+
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || 'dummy-key', // Provide a dummy key to prevent initialization error
 });
 
 export async function POST(req: Request) {
@@ -14,7 +19,10 @@ export async function POST(req: Request) {
     }
 
     if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 });
+      return NextResponse.json({ 
+        error: 'OpenAI API key not configured. Please add OPENAI_API_KEY to your environment variables.',
+        code: 'MISSING_API_KEY'
+      }, { status: 500 });
     }
 
     if (extractKeyTerms) {
@@ -88,6 +96,9 @@ Example format:
     });
   } catch (error) {
     console.error('Chat completion error:', error);
-    return NextResponse.json({ error: 'Failed to get AI response' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Failed to get AI response',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 } 
