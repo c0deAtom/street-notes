@@ -107,7 +107,7 @@ export default function NotesPage() {
   };
 
   return (
-    <div className="h-screen flex relative">
+    <div className="flex relative h-[calc(100vh-4rem)]">
       <Sidebar
         notes={notes}
         selectedNote={selectedNote}

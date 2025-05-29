@@ -38,8 +38,10 @@ export async function POST(req: Request) {
             content: message
           }
         ],
-        model: "gpt-3.5-turbo",
-        response_format: { type: "json_object" }
+        model: "gpt-3.5-turbo-instruct",
+        response_format: { type: "json_object" },
+        temperature: 0.1,
+        max_tokens: 100
       });
 
       const responseContent = completion.choices[0].message.content;
@@ -88,7 +90,9 @@ Example format:
           content: message
         }
       ],
-      model: "gpt-3.5-turbo",
+      model: "gpt-3.5-turbo-instruct",
+      temperature: 0.5,
+      max_tokens: 800
     });
 
     return NextResponse.json({ 

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
+import { Textarea } from '@/components/ui/textarea';
 
 interface AIChatInputProps {
   onResponse: (response: string) => void;
@@ -11,10 +12,12 @@ interface AIChatInputProps {
 export function AIChatInput({ onResponse }: AIChatInputProps) {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [input, setInput] = useState('');
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim()) return;
+    if (!input.trim()) return;
 
     try {
       setIsLoading(true);
@@ -23,7 +26,7 @@ export function AIChatInput({ onResponse }: AIChatInputProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message: input }),
       });
 
       if (!response.ok) {
@@ -32,7 +35,7 @@ export function AIChatInput({ onResponse }: AIChatInputProps) {
 
       const data = await response.json();
       onResponse(data.response);
-      setMessage('');
+      setInput('');
     } catch (error) {
       console.error('Error:', error);
       toast.error('Failed to get AI response');
@@ -41,22 +44,38 @@ export function AIChatInput({ onResponse }: AIChatInputProps) {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e as React.FormEvent);
+    }
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2 mt-4">
-      <Input
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
-        placeholder="Ask AI to help with your notes..."
-        disabled={isLoading}
-        className="flex-1"
-      />
-      <Button type="submit" disabled={isLoading || !message.trim()}>
-        {isLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Send className="h-4 w-4" />
-        )}
-      </Button>
+    <form onSubmit={handleSubmit} className="relative">
+      <div className="relative">
+        <Textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask AI to help with your notes..."
+          className="pr-12 min-h-[40px] focus:min-h-[120px] transition-all duration-200 ease-in-out resize-none"
+          disabled={isLoading}
+        />
+        <Button
+          type="submit"
+          size="icon"
+          className="absolute right-2 bottom-2"
+          disabled={isLoading || !input.trim()}
+        >
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
     </form>
   );
 } 

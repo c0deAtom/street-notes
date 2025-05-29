@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditNote } from '@/components/EditNote';
 import { MoreVertical, Trash2, Edit2, Play, Pause, Rewind, FastForward, BookOpen, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -688,7 +688,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
 
   return (
     <>
-      <Card className="flex flex-col h-[calc(100vh-2rem)]">
+      <Card className="flex flex-col h-[calc(88vh-2rem)]">
         <CardHeader className="flex-shrink-0">
           <CardTitle>
             <div className='flex justify-between items-center'>
@@ -731,7 +731,6 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
                     onClick={() => {
                       setIsQuizMode(!isQuizMode);
                       if (!isQuizMode) {
-                        // Only reset if turning quiz mode on
                         setRevealedWords(new Set());
                         setWrongAnswers(new Set());
                       }
@@ -764,73 +763,374 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
             </div>
           </CardTitle>
         </CardHeader>
-        <CardContent onMouseLeave={handleMouseLeave} className="flex-1 overflow-y-auto min-h-0 max-h-[calc(100vh-12rem)]">
-          <div className="prose prose-sm max-w-none dark:prose-invert pb-4">
-            {note.content?.split('\n').map((paragraph, pIndex) => (
-              <div key={pIndex}>
-                {paragraph.split(' ').map((word, index, array) => {
-                  const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
-                  const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
-                  const isLastWord = index === array.length - 1;
-                  
-                  return (
-                    <span
-                      key={index}
-                      onMouseDown={() => handleMouseDown(word, note.id)}
-                      onMouseUp={handleMouseUp}
-                      onClick={(e) => handleWordClick(word, e.currentTarget, index)}
-                      style={{ 
-                        cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
-                        backgroundColor: isHighlighted ? 'yellow' : 'transparent',
-                        opacity: highlightedWords.has(word) ? 0.7 : 1,
-                        color: shouldHide ? 'transparent' : 'inherit',
-                        textDecoration: shouldHide ? 'underline' : 'none',
-                        userSelect: 'none',
-                        padding: isHighlighted ? '0 2px' : '0',
-                        margin: isHighlighted ? '0 1px' : '0',
-                        borderRadius: isHighlighted ? '2px' : '0'
-                      }}
-                    >
-                      {word}{!isLastWord && ' '}
-                    </span>
-                  );
-                })}
+        <CardContent onMouseLeave={handleMouseLeave} className="flex-1 overflow-hidden">
+          <div className="flex gap-4 h-full">
+            <div className="flex-1 overflow-y-auto">
+              <div className="prose prose-sm max-w-none dark:prose-invert pb-4">
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => {
+                      if (typeof children !== 'string') {
+                        return <div>{children}</div>;
+                      }
+                      return (
+                        <div>
+                          {children.split(' ').map((word, index, array) => {
+                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
+                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
+                            const isLastWord = index === array.length - 1;
+                            
+                            return (
+                              <span
+                                key={index}
+                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
+                                onMouseUp={handleMouseUp}
+                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
+                                style={{ 
+                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
+                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
+                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
+                                  color: shouldHide ? 'transparent' : 'inherit',
+                                  textDecoration: shouldHide ? 'underline' : 'none',
+                                  userSelect: 'none',
+                                  padding: isHighlighted ? '0 2px' : '0',
+                                  margin: isHighlighted ? '0 1px' : '0',
+                                  borderRadius: isHighlighted ? '2px' : '0'
+                                }}
+                              >
+                                {word}{!isLastWord && ' '}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      );
+                    },
+                    ul: ({ children }) => <ul className="list-disc pl-6 my-2">{children}</ul>,
+                    ol: ({ children }) => <ol className="list-decimal pl-6 my-2">{children}</ol>,
+                    li: ({ children }) => {
+                      // Handle both string and array of children
+                      const processContent = (content: any): React.ReactNode => {
+                        if (typeof content === 'string') {
+                          return content.split(' ').map((word, index, array) => {
+                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
+                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
+                            const isLastWord = index === array.length - 1;
+                            
+                            return (
+                              <span
+                                key={index}
+                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
+                                onMouseUp={handleMouseUp}
+                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
+                                style={{ 
+                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
+                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
+                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
+                                  color: shouldHide ? 'transparent' : 'inherit',
+                                  textDecoration: shouldHide ? 'underline' : 'none',
+                                  userSelect: 'none',
+                                  padding: isHighlighted ? '0 2px' : '0',
+                                  margin: isHighlighted ? '0 1px' : '0',
+                                  borderRadius: isHighlighted ? '2px' : '0'
+                                }}
+                              >
+                                {word}{!isLastWord && ' '}
+                              </span>
+                            );
+                          });
+                        }
+                        
+                        if (Array.isArray(content)) {
+                          return content.map((item, index) => (
+                            <span key={index}>
+                              {processContent(item)}
+                              {index < content.length - 1 && ' '}
+                            </span>
+                          ));
+                        }
+                        
+                        return content;
+                      };
+
+                      return (
+                        <li className="my-1">
+                          {processContent(children)}
+                        </li>
+                      );
+                    },
+                    h1: ({ children }) => {
+                      if (typeof children !== 'string') {
+                        return <h1 className="text-2xl font-bold mt-4 mb-2">{children}</h1>;
+                      }
+                      return (
+                        <h1 className="text-2xl font-bold mt-4 mb-2">
+                          {children.split(' ').map((word, index, array) => {
+                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
+                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
+                            const isLastWord = index === array.length - 1;
+                            
+                            return (
+                              <span
+                                key={index}
+                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
+                                onMouseUp={handleMouseUp}
+                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
+                                style={{ 
+                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
+                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
+                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
+                                  color: shouldHide ? 'transparent' : 'inherit',
+                                  textDecoration: shouldHide ? 'underline' : 'none',
+                                  userSelect: 'none',
+                                  padding: isHighlighted ? '0 2px' : '0',
+                                  margin: isHighlighted ? '0 1px' : '0',
+                                  borderRadius: isHighlighted ? '2px' : '0'
+                                }}
+                              >
+                                {word}{!isLastWord && ' '}
+                              </span>
+                            );
+                          })}
+                        </h1>
+                      );
+                    },
+                    h2: ({ children }) => {
+                      if (typeof children !== 'string') {
+                        return <h2 className="text-xl font-bold mt-4 mb-2">{children}</h2>;
+                      }
+                      return (
+                        <h2 className="text-xl font-bold mt-4 mb-2">
+                          {children.split(' ').map((word, index, array) => {
+                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
+                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
+                            const isLastWord = index === array.length - 1;
+                            
+                            return (
+                              <span
+                                key={index}
+                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
+                                onMouseUp={handleMouseUp}
+                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
+                                style={{ 
+                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
+                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
+                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
+                                  color: shouldHide ? 'transparent' : 'inherit',
+                                  textDecoration: shouldHide ? 'underline' : 'none',
+                                  userSelect: 'none',
+                                  padding: isHighlighted ? '0 2px' : '0',
+                                  margin: isHighlighted ? '0 1px' : '0',
+                                  borderRadius: isHighlighted ? '2px' : '0'
+                                }}
+                              >
+                                {word}{!isLastWord && ' '}
+                              </span>
+                            );
+                          })}
+                        </h2>
+                      );
+                    },
+                    h3: ({ children }) => {
+                      if (typeof children !== 'string') {
+                        return <h3 className="text-lg font-bold mt-3 mb-2">{children}</h3>;
+                      }
+                      return (
+                        <h3 className="text-lg font-bold mt-3 mb-2">
+                          {children.split(' ').map((word, index, array) => {
+                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
+                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
+                            const isLastWord = index === array.length - 1;
+                            
+                            return (
+                              <span
+                                key={index}
+                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
+                                onMouseUp={handleMouseUp}
+                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
+                                style={{ 
+                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
+                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
+                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
+                                  color: shouldHide ? 'transparent' : 'inherit',
+                                  textDecoration: shouldHide ? 'underline' : 'none',
+                                  userSelect: 'none',
+                                  padding: isHighlighted ? '0 2px' : '0',
+                                  margin: isHighlighted ? '0 1px' : '0',
+                                  borderRadius: isHighlighted ? '2px' : '0'
+                                }}
+                              >
+                                {word}{!isLastWord && ' '}
+                              </span>
+                            );
+                          })}
+                        </h3>
+                      );
+                    },
+                    strong: ({ children }) => {
+                      if (typeof children !== 'string') {
+                        return <strong className="font-bold">{children}</strong>;
+                      }
+                      return (
+                        <strong className="font-bold">
+                          {children.split(' ').map((word, index, array) => {
+                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
+                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
+                            const isLastWord = index === array.length - 1;
+                            
+                            return (
+                              <span
+                                key={index}
+                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
+                                onMouseUp={handleMouseUp}
+                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
+                                style={{ 
+                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
+                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
+                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
+                                  color: shouldHide ? 'transparent' : 'inherit',
+                                  textDecoration: shouldHide ? 'underline' : 'none',
+                                  userSelect: 'none',
+                                  padding: isHighlighted ? '0 2px' : '0',
+                                  margin: isHighlighted ? '0 1px' : '0',
+                                  borderRadius: isHighlighted ? '2px' : '0'
+                                }}
+                              >
+                                {word}{!isLastWord && ' '}
+                              </span>
+                            );
+                          })}
+                        </strong>
+                      );
+                    },
+                    em: ({ children }) => {
+                      if (typeof children !== 'string') {
+                        return <em className="italic">{children}</em>;
+                      }
+                      return (
+                        <em className="italic">
+                          {children.split(' ').map((word, index, array) => {
+                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
+                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
+                            const isLastWord = index === array.length - 1;
+                            
+                            return (
+                              <span
+                                key={index}
+                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
+                                onMouseUp={handleMouseUp}
+                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
+                                style={{ 
+                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
+                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
+                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
+                                  color: shouldHide ? 'transparent' : 'inherit',
+                                  textDecoration: shouldHide ? 'underline' : 'none',
+                                  userSelect: 'none',
+                                  padding: isHighlighted ? '0 2px' : '0',
+                                  margin: isHighlighted ? '0 1px' : '0',
+                                  borderRadius: isHighlighted ? '2px' : '0'
+                                }}
+                              >
+                                {word}{!isLastWord && ' '}
+                              </span>
+                            );
+                          })}
+                        </em>
+                      );
+                    },
+                    blockquote: ({ children }) => {
+                      if (typeof children !== 'string') {
+                        return <blockquote className="border-l-4 border-gray-300 pl-4 my-2 italic">{children}</blockquote>;
+                      }
+                      return (
+                        <blockquote className="border-l-4 border-gray-300 pl-4 my-2 italic">
+                          {children.split(' ').map((word, index, array) => {
+                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
+                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
+                            const isLastWord = index === array.length - 1;
+                            
+                            return (
+                              <span
+                                key={index}
+                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
+                                onMouseUp={handleMouseUp}
+                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
+                                style={{ 
+                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
+                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
+                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
+                                  color: shouldHide ? 'transparent' : 'inherit',
+                                  textDecoration: shouldHide ? 'underline' : 'none',
+                                  userSelect: 'none',
+                                  padding: isHighlighted ? '0 2px' : '0',
+                                  margin: isHighlighted ? '0 1px' : '0',
+                                  borderRadius: isHighlighted ? '2px' : '0'
+                                }}
+                              >
+                                {word}{!isLastWord && ' '}
+                              </span>
+                            );
+                          })}
+                        </blockquote>
+                      );
+                    },
+                    code: ({ children }) => <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{children}</code>,
+                    pre: ({ children }) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded my-2 overflow-x-auto">{children}</pre>,
+                  }}
+                >
+                  {note.content || ''}
+                </ReactMarkdown>
               </div>
-            ))}
-          </div>
-          <div className="sticky bottom-0 bg-background pt-4 mt-4 border-t">
-            <p className="mb-2">
-              <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
-            </p>
-            <AIChatInput onResponse={handleAIResponse} />
-          </div>
-          {showResults && (
-            <div className="mt-4 p-4 bg-muted rounded-lg">
-              <h3 className="text-lg font-semibold mb-2">Quiz Results</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-green-600">Correct Answers: {quizStats.correct}</p>
-                  <p className="text-red-600">Wrong Answers: {quizStats.wrong}</p>
+             
+              {showResults && (
+                <div className="mt-4 p-4 bg-muted rounded-lg">
+                  <h3 className="text-lg font-semibold mb-2">Quiz Results</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-green-600">Correct Answers: {quizStats.correct}</p>
+                      <p className="text-red-600">Wrong Answers: {quizStats.wrong}</p>
+                    </div>
+                    <div>
+                      <p>Total Attempts: {quizStats.total}</p>
+                      <p>Accuracy: {Math.round((quizStats.correct / quizStats.total) * 100)}%</p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    className="mt-4"
+                    onClick={() => {
+                      setShowResults(false);
+                      setRevealedWords(new Set());
+                      setQuizStats({ correct: 0, wrong: 0, total: 0 });
+                    }}
+                  >
+                    Try Again
+                  </Button>
                 </div>
-                <div>
-                  <p>Total Attempts: {quizStats.total}</p>
-                  <p>Accuracy: {Math.round((quizStats.correct / quizStats.total) * 100)}%</p>
-                </div>
-              </div>
-              <Button 
-                variant="outline" 
-                className="mt-4"
-                onClick={() => {
-                  setShowResults(false);
-                  setRevealedWords(new Set());
-                  setQuizStats({ correct: 0, wrong: 0, total: 0 });
-                }}
-              >
-                Try Again
-              </Button>
+              )}
             </div>
-          )}
+
+            <div className="w-64 flex-shrink-0 border-l pl-4">
+              <h3 className="text-lg font-semibold mb-4">Highlights</h3>
+              <div className="space-y-2 overflow-y-auto max-h-[calc(100vh-16rem)]">
+                {note.highlights.map((highlight, index) => (
+                  <div
+                    key={index}
+                    className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-md text-sm"
+                  >
+                    {highlight.word}
+                  </div>
+                ))}
+                {note.highlights.length === 0 && (
+                  <p className="text-muted-foreground text-sm">No highlights yet</p>
+                )}
+              </div>
+            </div>
+          </div>
         </CardContent>
+        <CardFooter className='sticky bottom-0 bg-gray-100 pt-4 mt-4 border-t w-full'> <div className="w-full">
+                <AIChatInput onResponse={handleAIResponse} />
+              </div></CardFooter>
       </Card>
 
       {popoverPosition && selectedWord && typeof window !== 'undefined' && createPortal(
