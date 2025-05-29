@@ -160,23 +160,37 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
     return false;
   });
 
-  // Save quiz state whenever it changes
+  // Clean up quiz data only when quiz is finished or turned off
   useEffect(() => {
-    try {
-      const stateToPersist: PersistedQuizState = {
-        revealedWords: Array.from(revealedWords).map(word => ({
-          word: word.word,
-          index: word.index
-        })),
-        quizStats,
-        showResults,
-        isQuizMode
-      };
-      localStorage.setItem(`quiz-state-${note.id}`, JSON.stringify(stateToPersist));
-    } catch (error) {
-      console.error('Error saving quiz state:', error);
+    const cleanupQuizData = () => {
+      // Only clean up if quiz is not active
+      if (!isQuizMode || showResults) {
+        localStorage.removeItem(`quiz-state-${note.id}`);
+      }
+    };
+
+    // Clean up when quiz mode is turned off or quiz is finished
+    if (!isQuizMode || showResults) {
+      cleanupQuizData();
     }
-  }, [revealedWords, quizStats, showResults, isQuizMode, note.id]);
+
+    // Clean up when tab is closed, but only if quiz is finished
+    const handleBeforeUnload = () => {
+      if (showResults) {
+        cleanupQuizData();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Only clean up on unmount if quiz is finished
+      if (showResults) {
+        cleanupQuizData();
+      }
+    };
+  }, [isQuizMode, showResults, note.id]);
 
   // Reset quiz state when quiz mode is toggled off
   useEffect(() => {
@@ -188,6 +202,26 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
       localStorage.removeItem(`quiz-state-${note.id}`);
     }
   }, [isQuizMode, note.id]);
+
+  // Save quiz state whenever it changes
+  useEffect(() => {
+    if (isQuizMode && !showResults) {  // Only save if quiz is active and not finished
+      try {
+        const stateToPersist: PersistedQuizState = {
+          revealedWords: Array.from(revealedWords).map(word => ({
+            word: word.word,
+            index: word.index
+          })),
+          quizStats,
+          showResults,
+          isQuizMode
+        };
+        localStorage.setItem(`quiz-state-${note.id}`, JSON.stringify(stateToPersist));
+      } catch (error) {
+        console.error('Error saving quiz state:', error);
+      }
+    }
+  }, [revealedWords, quizStats, showResults, isQuizMode, note.id]);
 
   // Show results when all words are revealed
   useEffect(() => {
@@ -473,6 +507,10 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
 
   const handleWordClick = (word: string, element: HTMLSpanElement, index: number) => {
     if (!isQuizMode) return;
+    
+    // Only show popover for highlighted words
+    const isHighlighted = note.highlights.some(h => h.word === word);
+    if (!isHighlighted) return;
     
     // Reset states before opening new popover
     setWrongAnswers(new Set());
