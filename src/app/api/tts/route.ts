@@ -1,8 +1,29 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { marked } from 'marked';
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'; // Default voice ID
+
+// Function to strip markdown and clean text
+async function cleanMarkdownText(text: string): Promise<string> {
+  // First convert markdown to HTML
+  const html = await marked.parse(text);
+  
+  // Remove HTML tags
+  const withoutHtml = html.replace(/<[^>]*>/g, ' ');
+  
+  // Clean up special characters and extra spaces
+  return withoutHtml
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 export async function POST(req: Request) {
   try {
@@ -16,8 +37,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'ElevenLabs API key not configured' }, { status: 500 });
     }
 
+    // Clean the text before sending to ElevenLabs
+    const cleanedText = await cleanMarkdownText(text);
+
     // Generate a unique hash for the content
-    const contentHash = crypto.createHash('md5').update(text).digest('hex');
+    const contentHash = crypto.createHash('md5').update(cleanedText).digest('hex');
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
@@ -29,7 +53,7 @@ export async function POST(req: Request) {
           'xi-api-key': ELEVENLABS_API_KEY,
         },
         body: JSON.stringify({
-          text,
+          text: cleanedText,
           model_id: 'eleven_monolingual_v1',
           voice_settings: {
             stability: 0.5,

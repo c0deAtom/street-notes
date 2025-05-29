@@ -648,10 +648,11 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
       // Create highlights from key terms
       const newHighlights = keyTerms.map((term: string) => ({ word: term.toLowerCase() }));
 
-      // Combine existing highlights with new ones
+      // Combine existing highlights with new ones, avoiding duplicates
+      const existingHighlightWords = new Set(note.highlights.map(h => h.word));
       const updatedHighlights = [
         ...note.highlights,
-        ...newHighlights
+        ...newHighlights.filter(h => !existingHighlightWords.has(h.word))
       ];
 
       // Format the response with proper spacing
@@ -778,30 +779,30 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
                           {children.split(' ').map((word, index, array) => {
                             const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
                             const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
-                            const isLastWord = index === array.length - 1;
-                            
-                            return (
-                              <span
-                                key={index}
+              const isLastWord = index === array.length - 1;
+              
+              return (
+                <span
+                  key={index}
                                 onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
-                                onMouseUp={handleMouseUp}
+                  onMouseUp={handleMouseUp}
                                 onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
-                                style={{ 
-                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
-                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
+                  style={{ 
+                    cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
+                    backgroundColor: isHighlighted ? 'yellow' : 'transparent',
                                   opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
-                                  color: shouldHide ? 'transparent' : 'inherit',
-                                  textDecoration: shouldHide ? 'underline' : 'none',
-                                  userSelect: 'none',
-                                  padding: isHighlighted ? '0 2px' : '0',
-                                  margin: isHighlighted ? '0 1px' : '0',
-                                  borderRadius: isHighlighted ? '2px' : '0'
-                                }}
-                              >
-                                {word}{!isLastWord && ' '}
-                              </span>
-                            );
-                          })}
+                    color: shouldHide ? 'transparent' : 'inherit',
+                    textDecoration: shouldHide ? 'underline' : 'none',
+                    userSelect: 'none',
+                    padding: isHighlighted ? '0 2px' : '0',
+                    margin: isHighlighted ? '0 1px' : '0',
+                    borderRadius: isHighlighted ? '2px' : '0'
+                  }}
+                >
+                  {word}{!isLastWord && ' '}
+                </span>
+              );
+            })}
                         </div>
                       );
                     },
@@ -1082,32 +1083,32 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
                 </ReactMarkdown>
               </div>
              
-              {showResults && (
-                <div className="mt-4 p-4 bg-muted rounded-lg">
-                  <h3 className="text-lg font-semibold mb-2">Quiz Results</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-green-600">Correct Answers: {quizStats.correct}</p>
-                      <p className="text-red-600">Wrong Answers: {quizStats.wrong}</p>
-                    </div>
-                    <div>
-                      <p>Total Attempts: {quizStats.total}</p>
-                      <p>Accuracy: {Math.round((quizStats.correct / quizStats.total) * 100)}%</p>
-                    </div>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    className="mt-4"
-                    onClick={() => {
-                      setShowResults(false);
-                      setRevealedWords(new Set());
-                      setQuizStats({ correct: 0, wrong: 0, total: 0 });
-                    }}
-                  >
-                    Try Again
-                  </Button>
+          {showResults && (
+            <div className="mt-4 p-4 bg-muted rounded-lg">
+              <h3 className="text-lg font-semibold mb-2">Quiz Results</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-green-600">Correct Answers: {quizStats.correct}</p>
+                  <p className="text-red-600">Wrong Answers: {quizStats.wrong}</p>
                 </div>
-              )}
+                <div>
+                  <p>Total Attempts: {quizStats.total}</p>
+                  <p>Accuracy: {Math.round((quizStats.correct / quizStats.total) * 100)}%</p>
+                </div>
+              </div>
+              <Button 
+                variant="outline" 
+                className="mt-4"
+                onClick={() => {
+                  setShowResults(false);
+                  setRevealedWords(new Set());
+                  setQuizStats({ correct: 0, wrong: 0, total: 0 });
+                }}
+              >
+                Try Again
+              </Button>
+            </div>
+          )}
             </div>
 
             <div className="w-64 flex-shrink-0 border-l pl-4">

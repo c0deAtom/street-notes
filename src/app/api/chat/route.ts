@@ -91,6 +91,44 @@ Example format:
       model: "gpt-3.5-turbo",
     });
 
+    // Extract key terms if requested
+    if (extractKeyTerms) {
+      const content = completion.choices[0].message.content;
+      if (!content) {
+        return NextResponse.json({ error: 'No content in response' }, { status: 500 });
+      }
+
+      const keyTermsResponse = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "Extract only single-word key terms from the text. Do not include phrases or multiple words. Return only the most important single words that would be good for highlighting. Return the words in a comma-separated list, all lowercase."
+          },
+          {
+            role: "user",
+            content: content
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 100
+      });
+
+      const keyTermsText = keyTermsResponse.choices[0]?.message?.content || '';
+      const keyTerms = keyTermsText
+        .split(',')
+        .map(term => term.trim().toLowerCase())
+        .filter(term => 
+          term.length > 0 && 
+          !term.includes(' ') && // Only single words
+          !term.includes('-') && // No hyphenated words
+          !term.includes('_') && // No words with underscores
+          !/^[0-9]+$/.test(term) // No numbers only
+        );
+
+      return NextResponse.json({ response: content, keyTerms });
+    }
+
     return NextResponse.json({ 
       response: completion.choices[0].message.content 
     });
