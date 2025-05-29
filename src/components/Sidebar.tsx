@@ -66,7 +66,8 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                 </CardHeader>
                 {isExpanded && (
                   <CardContent className="text-sm">
-                    <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
+                    <strong>Highlights:</strong> {note.highlights.slice(0, 6).map(h => h.word).join(', ')}
+                    {note.highlights.length > 6 && '...'}
                   </CardContent>
                 )}
               </Card>
