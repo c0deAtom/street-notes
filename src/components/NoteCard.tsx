@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/popover";
 import { createPortal } from 'react-dom';
 import { cn } from "@/lib/utils";
+import { AIChatInput } from '@/components/AIChatInput';
+import ReactMarkdown from 'react-markdown';
 
 interface Highlight {
   word: string;
@@ -69,6 +71,15 @@ interface PersistedQuizState {
   quizStats: QuizStats;
   showResults: boolean;
   isQuizMode: boolean;
+}
+
+// Add interface for persisted tabs state
+interface PersistedTabsState {
+  openTabs: {
+    id: string;
+    title: string;
+    lastOpened: number;
+  }[];
 }
 
 export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing = false }: NoteCardProps) {
@@ -382,6 +393,32 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
     };
   }, [audioUrl]);
 
+  // Save tab state when note is opened
+  useEffect(() => {
+    try {
+      const existingTabs = localStorage.getItem('open-tabs');
+      const tabsState: PersistedTabsState = existingTabs ? JSON.parse(existingTabs) : { openTabs: [] };
+      
+      // Remove this note if it exists
+      tabsState.openTabs = tabsState.openTabs.filter(tab => tab.id !== note.id);
+      
+      // Add this note to the beginning
+      tabsState.openTabs.unshift({
+        id: note.id,
+        title: note.title,
+        lastOpened: Date.now()
+      });
+      
+      // Keep only the last 5 tabs
+      tabsState.openTabs = tabsState.openTabs.slice(0, 5);
+      
+      localStorage.setItem('open-tabs', JSON.stringify(tabsState));
+    } catch (error) {
+      console.error('Error saving tab state:', error);
+    }
+  }, [note.id, note.title]);
+
+  // Clean up tab state when note is deleted
   const handleDelete = async () => {
     try {
       // Delete audio from browser storage
@@ -396,6 +433,14 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
       }
       setCurrentContentHash(null);
       setAudioMetadata(null);
+      
+      // Remove from open tabs
+      const existingTabs = localStorage.getItem('open-tabs');
+      if (existingTabs) {
+        const tabsState: PersistedTabsState = JSON.parse(existingTabs);
+        tabsState.openTabs = tabsState.openTabs.filter(tab => tab.id !== note.id);
+        localStorage.setItem('open-tabs', JSON.stringify(tabsState));
+      }
       
       // Then delete the note
       onDelete(note.id);
@@ -491,6 +536,23 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
     };
   }, [audioUrl]);
 
+  // Clean up tab state when component unmounts
+  useEffect(() => {
+    return () => {
+      try {
+        const existingTabs = localStorage.getItem('open-tabs');
+        if (existingTabs) {
+          const tabsState: PersistedTabsState = JSON.parse(existingTabs);
+          // Remove this note from open tabs
+          tabsState.openTabs = tabsState.openTabs.filter(tab => tab.id !== note.id);
+          localStorage.setItem('open-tabs', JSON.stringify(tabsState));
+        }
+      } catch (error) {
+        console.error('Error cleaning up tab state:', error);
+      }
+    };
+  }, [note.id]);
+
   const generateQuizOptions = (correctWord: string) => {
     const otherWords = allWords.filter(word => word !== correctWord);
     const randomWords = otherWords
@@ -563,6 +625,57 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
     };
   }, [popoverPosition]);
 
+  const handleAIResponse = async (response: string) => {
+    try {
+      // Get key terms from AI
+      const keyTermsResponse = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          message: response,
+          extractKeyTerms: true
+        }),
+      });
+
+      if (!keyTermsResponse.ok) {
+        throw new Error('Failed to extract key terms');
+      }
+
+      const { keyTerms } = await keyTermsResponse.json();
+      
+      // Create highlights from key terms
+      const newHighlights = keyTerms.map((term: string) => ({ word: term.toLowerCase() }));
+
+      // Combine existing highlights with new ones
+      const updatedHighlights = [
+        ...note.highlights,
+        ...newHighlights
+      ];
+
+      // Format the response with proper spacing
+      const formattedResponse = `\n\n---\n\n${response}`;
+
+      // Update note with new content and highlights
+      if (note.content) {
+        onUpdate(note.id, note.content + formattedResponse, updatedHighlights, note.title);
+      } else {
+        onUpdate(note.id, response, updatedHighlights, note.title);
+      }
+    } catch (error) {
+      console.error('Error extracting key terms:', error);
+      toast.error('Failed to extract key terms');
+      
+      // Fallback to updating just the content without new highlights
+      if (note.content) {
+        onUpdate(note.id, note.content + '\n\n' + response, note.highlights, note.title);
+      } else {
+        onUpdate(note.id, response, note.highlights, note.title);
+      }
+    }
+  };
+
   if (isEditing) {
     return (
       <EditNote
@@ -575,8 +688,8 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
 
   return (
     <>
-      <Card>
-        <CardHeader>
+      <Card className="flex flex-col h-[calc(100vh-2rem)]">
+        <CardHeader className="flex-shrink-0">
           <CardTitle>
             <div className='flex justify-between items-center'>
               {note.title}
@@ -651,39 +764,46 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
             </div>
           </CardTitle>
         </CardHeader>
-        <CardContent onMouseLeave={handleMouseLeave}>
-          <p>
-            {note.content?.split(' ').map((word, index, array) => {
-              const isHighlighted = note.highlights.some(h => h.word === word);
-              const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word && r.index === index);
-              const isLastWord = index === array.length - 1;
-              
-              return (
-                <span
-                  key={index}
-                  onMouseDown={() => handleMouseDown(word, note.id)}
-                  onMouseUp={handleMouseUp}
-                  onClick={(e) => handleWordClick(word, e.currentTarget, index)}
-                  style={{ 
-                    cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
-                    backgroundColor: isHighlighted ? 'yellow' : 'transparent',
-                    opacity: highlightedWords.has(word) ? 0.7 : 1,
-                    color: shouldHide ? 'transparent' : 'inherit',
-                    textDecoration: shouldHide ? 'underline' : 'none',
-                    userSelect: 'none',
-                    padding: isHighlighted ? '0 2px' : '0',
-                    margin: isHighlighted ? '0 1px' : '0',
-                    borderRadius: isHighlighted ? '2px' : '0'
-                  }}
-                >
-                  {word}{!isLastWord && ' '}
-                </span>
-              );
-            })}
-          </p>
-          <p className="mt-2">
-            <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
-          </p>
+        <CardContent onMouseLeave={handleMouseLeave} className="flex-1 overflow-y-auto min-h-0 max-h-[calc(100vh-12rem)]">
+          <div className="prose prose-sm max-w-none dark:prose-invert pb-4">
+            {note.content?.split('\n').map((paragraph, pIndex) => (
+              <div key={pIndex}>
+                {paragraph.split(' ').map((word, index, array) => {
+                  const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
+                  const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
+                  const isLastWord = index === array.length - 1;
+                  
+                  return (
+                    <span
+                      key={index}
+                      onMouseDown={() => handleMouseDown(word, note.id)}
+                      onMouseUp={handleMouseUp}
+                      onClick={(e) => handleWordClick(word, e.currentTarget, index)}
+                      style={{ 
+                        cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
+                        backgroundColor: isHighlighted ? 'yellow' : 'transparent',
+                        opacity: highlightedWords.has(word) ? 0.7 : 1,
+                        color: shouldHide ? 'transparent' : 'inherit',
+                        textDecoration: shouldHide ? 'underline' : 'none',
+                        userSelect: 'none',
+                        padding: isHighlighted ? '0 2px' : '0',
+                        margin: isHighlighted ? '0 1px' : '0',
+                        borderRadius: isHighlighted ? '2px' : '0'
+                      }}
+                    >
+                      {word}{!isLastWord && ' '}
+                    </span>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="sticky bottom-0 bg-background pt-4 mt-4 border-t">
+            <p className="mb-2">
+              <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
+            </p>
+            <AIChatInput onResponse={handleAIResponse} />
+          </div>
           {showResults && (
             <div className="mt-4 p-4 bg-muted rounded-lg">
               <h3 className="text-lg font-semibold mb-2">Quiz Results</h3>

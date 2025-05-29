@@ -59,11 +59,16 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                 } ${!isExpanded ? 'w-12 mx-auto ' : 'w-full'}`}
                 onClick={() => onNoteSelect(note)}
               >
-                <CardHeader className={` h-2 ${!isExpanded ? 'px-2' : ''}`}>
-                  <CardTitle className={`text-lg  ${!isExpanded ? 'text-center' : ''}`}>
+                <CardHeader className={`h-2 ${!isExpanded ? 'px-2' : ''}`}>
+                  <CardTitle className={`text-lg ${!isExpanded ? 'text-center' : ''}`}>
                     {isExpanded ? note.title : note.title.charAt(0)}
                   </CardTitle>
                 </CardHeader>
+                {isExpanded && (
+                  <CardContent className="text-sm">
+                    <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
+                  </CardContent>
+                )}
               </Card>
             ))}
           </div>
