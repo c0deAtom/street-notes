@@ -52,6 +52,25 @@ interface AudioMetadata {
   title: string;
 }
 
+interface RevealedWord {
+  word: string;
+  index: number;
+}
+
+interface QuizStats {
+  correct: number;
+  wrong: number;
+  total: number;
+}
+
+// Add new interface for persisted quiz state
+interface PersistedQuizState {
+  revealedWords: RevealedWord[];
+  quizStats: QuizStats;
+  showResults: boolean;
+  isQuizMode: boolean;
+}
+
 export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing = false }: NoteCardProps) {
   const [isEditing, setIsEditing] = useState(initialIsEditing);
   const [highlightedWords, setHighlightedWords] = useState<Set<string>>(new Set());
@@ -63,11 +82,45 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
   const [currentContentHash, setCurrentContentHash] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isQuizMode, setIsQuizMode] = useState(false);
+  const [isQuizMode, setIsQuizMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const persistedState = localStorage.getItem(`quiz-state-${note.id}`);
+      if (persistedState) {
+        try {
+          const parsedState = JSON.parse(persistedState) as PersistedQuizState;
+          return parsedState.isQuizMode;
+        } catch (error) {
+          console.error('Error loading quiz mode state:', error);
+        }
+      }
+    }
+    return false;
+  });
   const [quizOptions, setQuizOptions] = useState<QuizOption[]>([]);
-  const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [selectedWord, setSelectedWord] = useState<RevealedWord | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
-  const [revealedWords, setRevealedWords] = useState<Set<string>>(new Set());
+  const [revealedWords, setRevealedWords] = useState<Set<RevealedWord>>(() => {
+    if (typeof window !== 'undefined') {
+      const persistedState = localStorage.getItem(`quiz-state-${note.id}`);
+      if (persistedState) {
+        try {
+          const parsedState = JSON.parse(persistedState) as PersistedQuizState;
+          if (parsedState.revealedWords && Array.isArray(parsedState.revealedWords)) {
+            const restoredRevealedWords = new Set<RevealedWord>();
+            parsedState.revealedWords.forEach(word => {
+              if (word && typeof word.word === 'string' && typeof word.index === 'number') {
+                restoredRevealedWords.add({ word: word.word, index: word.index });
+              }
+            });
+            return restoredRevealedWords;
+          }
+        } catch (error) {
+          console.error('Error loading revealed words state:', error);
+        }
+      }
+    }
+    return new Set();
+  });
   const [wrongAnswers, setWrongAnswers] = useState<Set<string>>(new Set());
   const optionsRef = useRef<HTMLDivElement>(null);
   const [allWords] = useState<string[]>(() => {
@@ -78,6 +131,75 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAudioReady, setIsAudioReady] = useState(false);
   const [audioMetadata, setAudioMetadata] = useState<AudioMetadata | null>(null);
+  const [quizStats, setQuizStats] = useState<QuizStats>(() => {
+    if (typeof window !== 'undefined') {
+      const persistedState = localStorage.getItem(`quiz-state-${note.id}`);
+      if (persistedState) {
+        try {
+          const parsedState = JSON.parse(persistedState) as PersistedQuizState;
+          return parsedState.quizStats || { correct: 0, wrong: 0, total: 0 };
+        } catch (error) {
+          console.error('Error loading quiz stats:', error);
+        }
+      }
+    }
+    return { correct: 0, wrong: 0, total: 0 };
+  });
+  const [showResults, setShowResults] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const persistedState = localStorage.getItem(`quiz-state-${note.id}`);
+      if (persistedState) {
+        try {
+          const parsedState = JSON.parse(persistedState) as PersistedQuizState;
+          return parsedState.showResults || false;
+        } catch (error) {
+          console.error('Error loading show results state:', error);
+        }
+      }
+    }
+    return false;
+  });
+
+  // Save quiz state whenever it changes
+  useEffect(() => {
+    try {
+      const stateToPersist: PersistedQuizState = {
+        revealedWords: Array.from(revealedWords).map(word => ({
+          word: word.word,
+          index: word.index
+        })),
+        quizStats,
+        showResults,
+        isQuizMode
+      };
+      localStorage.setItem(`quiz-state-${note.id}`, JSON.stringify(stateToPersist));
+    } catch (error) {
+      console.error('Error saving quiz state:', error);
+    }
+  }, [revealedWords, quizStats, showResults, isQuizMode, note.id]);
+
+  // Reset quiz state when quiz mode is toggled off
+  useEffect(() => {
+    if (!isQuizMode) {
+      setQuizStats({ correct: 0, wrong: 0, total: 0 });
+      setShowResults(false);
+      setRevealedWords(new Set());
+      setWrongAnswers(new Set());
+      localStorage.removeItem(`quiz-state-${note.id}`);
+    }
+  }, [isQuizMode, note.id]);
+
+  // Show results when all words are revealed
+  useEffect(() => {
+    if (isQuizMode && note.highlights.length > 0) {
+      const allWordsRevealed = note.highlights.every(highlight => 
+        Array.from(revealedWords).some(r => r.word === highlight.word)
+      );
+      if (allWordsRevealed) {
+        setShowResults(true);
+      }
+    }
+  }, [revealedWords, isQuizMode, note.highlights]);
 
   const generateContentHash = (content: string) => {
     return crypto.createHash('sha256')
@@ -349,27 +471,42 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
     setQuizOptions(options);
   };
 
-  const handleWordClick = (word: string, element: HTMLSpanElement) => {
+  const handleWordClick = (word: string, element: HTMLSpanElement, index: number) => {
     if (!isQuizMode) return;
+    
+    // Reset states before opening new popover
+    setWrongAnswers(new Set());
+    setQuizOptions([]);
+    
     const rect = element.getBoundingClientRect();
     setPopoverPosition({
       x: rect.left,
       y: rect.bottom + window.scrollY
     });
-    setSelectedWord(word);
+    setSelectedWord({ word, index });
     generateQuizOptions(word);
   };
 
   const handleOptionSelect = (option: QuizOption) => {
-    if (option.isCorrect) {
+    if (option.isCorrect && selectedWord) {
       toast.success('Correct!');
-      setRevealedWords(prev => new Set([...prev, selectedWord!]));
+      setRevealedWords(prev => new Set([...prev, selectedWord]));
+      setQuizStats(prev => ({
+        ...prev,
+        correct: prev.correct + 1,
+        total: prev.total + 1
+      }));
       setSelectedWord(null);
       setPopoverPosition(null);
       setWrongAnswers(new Set());
     } else {
       toast.error('Incorrect!');
       setWrongAnswers(prev => new Set([...prev, option.word]));
+      setQuizStats(prev => ({
+        ...prev,
+        wrong: prev.wrong + 1,
+        total: prev.total + 1
+      }));
     }
   };
 
@@ -443,6 +580,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
                     onClick={() => {
                       setIsQuizMode(!isQuizMode);
                       if (!isQuizMode) {
+                        // Only reset if turning quiz mode on
                         setRevealedWords(new Set());
                         setWrongAnswers(new Set());
                       }
@@ -479,7 +617,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
           <p>
             {note.content?.split(' ').map((word, index, array) => {
               const isHighlighted = note.highlights.some(h => h.word === word);
-              const shouldHide = isQuizMode && isHighlighted && !revealedWords.has(word);
+              const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word && r.index === index);
               const isLastWord = index === array.length - 1;
               
               return (
@@ -487,7 +625,7 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
                   key={index}
                   onMouseDown={() => handleMouseDown(word, note.id)}
                   onMouseUp={handleMouseUp}
-                  onClick={(e) => handleWordClick(word, e.currentTarget)}
+                  onClick={(e) => handleWordClick(word, e.currentTarget, index)}
                   style={{ 
                     cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
                     backgroundColor: isHighlighted ? 'yellow' : 'transparent',
@@ -508,6 +646,32 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
           <p className="mt-2">
             <strong>Highlights:</strong> {note.highlights.map(h => h.word).join(', ')}
           </p>
+          {showResults && (
+            <div className="mt-4 p-4 bg-muted rounded-lg">
+              <h3 className="text-lg font-semibold mb-2">Quiz Results</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-green-600">Correct Answers: {quizStats.correct}</p>
+                  <p className="text-red-600">Wrong Answers: {quizStats.wrong}</p>
+                </div>
+                <div>
+                  <p>Total Attempts: {quizStats.total}</p>
+                  <p>Accuracy: {Math.round((quizStats.correct / quizStats.total) * 100)}%</p>
+                </div>
+              </div>
+              <Button 
+                variant="outline" 
+                className="mt-4"
+                onClick={() => {
+                  setShowResults(false);
+                  setRevealedWords(new Set());
+                  setQuizStats({ correct: 0, wrong: 0, total: 0 });
+                }}
+              >
+                Try Again
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
