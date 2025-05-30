@@ -11,6 +11,9 @@ interface Tile {
   title: string;
   content: string | null;
   position: number;
+  noteId: string;
+  highlights: any[];
+  createdAt: Date;
 }
 
 interface Note {
@@ -19,12 +22,13 @@ interface Note {
   content: string | null;
   highlights: { word: string }[];
   tiles: Tile[];
+  createdAt: Date;
 }
 
 interface SidebarProps {
   notes: Note[];
   selectedNote: Note | null;
-  onNoteSelect: (note: Note) => void;
+  onNoteSelect: (note: Note | null) => void;
   onAddNote: () => void;
   onExpand?: (expanded: boolean) => void;
 }

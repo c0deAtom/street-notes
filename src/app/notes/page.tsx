@@ -13,6 +13,9 @@ interface Tile {
   title: string;
   content: string | null;
   position: number;
+  noteId: string;
+  highlights: any[];
+  createdAt: Date;
 }
 
 interface Note {
@@ -21,6 +24,7 @@ interface Note {
   content: string | null;
   highlights: Highlight[];
   tiles: Tile[];
+  createdAt: Date;
 }
 
 export default function NotesPage() {
