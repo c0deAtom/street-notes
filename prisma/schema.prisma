@@ -11,6 +11,17 @@ model Note {
   id      String   @id @default(uuid())
   title   String
   content String?
-  highlights Json[] @default([])
   createdAt DateTime @default(now())
+  tiles    Tile[]   // Relation to Tiles
+}
+
+model Tile {
+  id        String   @id @default(uuid())
+  title     String
+  content   String?
+  highlights Json[] @default([])
+  position  Int      // To maintain order of tiles
+  createdAt DateTime @default(now())
+  note      Note     @relation(fields: [noteId], references: [id])
+  noteId    String   // Foreign key to Note
 } 

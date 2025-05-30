@@ -6,11 +6,19 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 
+interface Tile {
+  id: string;
+  title: string;
+  content: string | null;
+  position: number;
+}
+
 interface Note {
   id: string;
   title: string;
   content: string | null;
   highlights: { word: string }[];
+  tiles: Tile[];
 }
 
 interface SidebarProps {
@@ -64,12 +72,7 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                     {isExpanded ? note.title : note.title.charAt(0)}
                   </CardTitle>
                 </CardHeader>
-                {isExpanded && (
-                  <CardContent className="">
-                    {note.highlights.slice(0, 2).map(h => h.word).join(', ')}
-                    {note.highlights.length > 2 && '...'}
-                  </CardContent>
-                )}
+               
               </Card>
             ))}
           </div>

@@ -1,12 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
 import { Sidebar } from '@/components/Sidebar';
-import { NoteContent } from '@/components/NoteContent';
+import { NoteCard } from '@/components/NoteCard';
 
 interface Highlight {
   word: string;
+}
+
+interface Tile {
+  id: string;
+  title: string;
+  content: string | null;
+  position: number;
 }
 
 interface Note {
@@ -14,6 +20,7 @@ interface Note {
   title: string;
   content: string | null;
   highlights: Highlight[];
+  tiles: Tile[];
 }
 
 export default function NotesPage() {
@@ -120,12 +127,15 @@ export default function NotesPage() {
           isSidebarExpanded ? 'ml-64' : 'ml-16'
         }`}
       >
-        <NoteContent
-          selectedNote={selectedNote}
-          onDelete={deleteNote}
-          onUpdate={updateNote}
-          onNoteSelect={setSelectedNote}
-        />
+        {selectedNote ? (
+          <div className="p-4 h-full overflow-auto">
+            <NoteCard noteId={selectedNote.id} initialTiles={selectedNote.tiles || []} />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-500">
+            Select a note or create a new one
+          </div>
+        )}
       </div>
     </div>
   );
