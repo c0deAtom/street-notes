@@ -26,6 +26,8 @@ import ReactMarkdown from 'react-markdown';
 
 interface Highlight {
   word: string;
+  index: number;
+  id: string;
 }
 
 interface Note {
@@ -84,549 +86,256 @@ interface PersistedTabsState {
 
 export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing = false }: NoteCardProps) {
   const [isEditing, setIsEditing] = useState(initialIsEditing);
-  const [highlightedWords, setHighlightedWords] = useState<Set<string>>(new Set());
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [highlightTimeout, setHighlightTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [isConverting, setIsConverting] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isQuizMode, setIsQuizMode] = useState(false);
+  const [revealedWords, setRevealedWords] = useState<Set<string>>(new Set());
+  const [quizStats, setQuizStats] = useState({ correct: 0, wrong: 0, total: 0 });
+  const [showResults, setShowResults] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentContentHash, setCurrentContentHash] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [hasAudio, setHasAudio] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [currentTypingText, setCurrentTypingText] = useState('');
+  const contentRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isQuizMode, setIsQuizMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const persistedState = localStorage.getItem(`quiz-state-${note.id}`);
-      if (persistedState) {
-        try {
-          const parsedState = JSON.parse(persistedState) as PersistedQuizState;
-          return parsedState.isQuizMode;
-        } catch (error) {
-          console.error('Error loading quiz mode state:', error);
-        }
-      }
-    }
-    return false;
-  });
+  const [selectedWord, setSelectedWord] = useState<{ word: string; index: number } | null>(null);
   const [quizOptions, setQuizOptions] = useState<QuizOption[]>([]);
-  const [selectedWord, setSelectedWord] = useState<RevealedWord | null>(null);
-  const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
-  const [revealedWords, setRevealedWords] = useState<Set<RevealedWord>>(() => {
-    if (typeof window !== 'undefined') {
-      const persistedState = localStorage.getItem(`quiz-state-${note.id}`);
-      if (persistedState) {
-        try {
-          const parsedState = JSON.parse(persistedState) as PersistedQuizState;
-          if (parsedState.revealedWords && Array.isArray(parsedState.revealedWords)) {
-            const restoredRevealedWords = new Set<RevealedWord>();
-            parsedState.revealedWords.forEach(word => {
-              if (word && typeof word.word === 'string' && typeof word.index === 'number') {
-                restoredRevealedWords.add({ word: word.word, index: word.index });
-              }
-            });
-            return restoredRevealedWords;
-          }
-        } catch (error) {
-          console.error('Error loading revealed words state:', error);
-        }
-      }
-    }
-    return new Set();
-  });
-  const [wrongAnswers, setWrongAnswers] = useState<Set<string>>(new Set());
-  const optionsRef = useRef<HTMLDivElement>(null);
-  const [allWords] = useState<string[]>(() => {
-    const words = new Set<string>();
-    note.highlights.forEach(h => words.add(h.word));
-    return Array.from(words);
-  });
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isAudioReady, setIsAudioReady] = useState(false);
-  const [audioMetadata, setAudioMetadata] = useState<AudioMetadata | null>(null);
-  const [quizStats, setQuizStats] = useState<QuizStats>(() => {
-    if (typeof window !== 'undefined') {
-      const persistedState = localStorage.getItem(`quiz-state-${note.id}`);
-      if (persistedState) {
-        try {
-          const parsedState = JSON.parse(persistedState) as PersistedQuizState;
-          return parsedState.quizStats || { correct: 0, wrong: 0, total: 0 };
-        } catch (error) {
-          console.error('Error loading quiz stats:', error);
-        }
-      }
-    }
-    return { correct: 0, wrong: 0, total: 0 };
-  });
-  const [showResults, setShowResults] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const persistedState = localStorage.getItem(`quiz-state-${note.id}`);
-      if (persistedState) {
-        try {
-          const parsedState = JSON.parse(persistedState) as PersistedQuizState;
-          return parsedState.showResults || false;
-        } catch (error) {
-          console.error('Error loading show results state:', error);
-        }
-      }
-    }
-    return false;
-  });
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [wrongOptions, setWrongOptions] = useState<Set<string>>(new Set());
 
-  // Clean up quiz data only when quiz is finished or turned off
+  // Generate a unique ID for a highlight
+  const generateHighlightId = (word: string, index: number) => `${word}-${index}-${Date.now()}`;
+
+  // Check if audio exists for the current content
   useEffect(() => {
-    const cleanupQuizData = () => {
-      // Only clean up if quiz is not active
-      if (!isQuizMode || showResults) {
-        localStorage.removeItem(`quiz-state-${note.id}`);
+    const checkAudio = async () => {
+      if (!note.content) {
+        setHasAudio(false);
+        setAudioUrl(null);
+        return;
+      }
+
+      const contentHash = crypto.createHash('md5').update(note.content).digest('hex');
+      const metadata: AudioMetadata = {
+        noteId: note.id,
+        contentHash,
+        timestamp: Date.now(),
+        title: note.title
+      };
+
+      const cachedAudio = await audioStorage.getAudio(metadata);
+      if (cachedAudio) {
+        const url = URL.createObjectURL(cachedAudio);
+        setAudioUrl(url);
+        setHasAudio(true);
+        if (audioRef.current) {
+          audioRef.current.src = url;
+        }
+      } else {
+        setHasAudio(false);
+        setAudioUrl(null);
       }
     };
 
-    // Clean up when quiz mode is turned off or quiz is finished
-    if (!isQuizMode || showResults) {
-      cleanupQuizData();
-    }
+    checkAudio();
 
-    // Clean up when tab is closed, but only if quiz is finished
-    const handleBeforeUnload = () => {
-      if (showResults) {
-        cleanupQuizData();
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
+    // Cleanup function to revoke object URLs
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      // Only clean up on unmount if quiz is finished
-      if (showResults) {
-        cleanupQuizData();
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
       }
     };
-  }, [isQuizMode, showResults, note.id]);
+  }, [note.content, note.id, note.title]);
 
-  // Reset quiz state when quiz mode is toggled off
-  useEffect(() => {
-    if (!isQuizMode) {
-      setQuizStats({ correct: 0, wrong: 0, total: 0 });
-      setShowResults(false);
-      setRevealedWords(new Set());
-      setWrongAnswers(new Set());
-      localStorage.removeItem(`quiz-state-${note.id}`);
-    }
-  }, [isQuizMode, note.id]);
+  const handleWordClick = (word: string, index: number) => {
+    if (isQuizMode) {
+      const normalizedWord = word.toLowerCase();
+      const isHighlighted = note.highlights.some(h => h.word === normalizedWord && h.index === index);
+      const isHidden = isHighlighted && !revealedWords.has(`${normalizedWord}-${index}`);
 
-  // Save quiz state whenever it changes
-  useEffect(() => {
-    if (isQuizMode && !showResults) {  // Only save if quiz is active and not finished
-      try {
-        const stateToPersist: PersistedQuizState = {
-          revealedWords: Array.from(revealedWords).map(word => ({
-            word: word.word,
-            index: word.index
-          })),
-          quizStats,
-          showResults,
-          isQuizMode
-        };
-        localStorage.setItem(`quiz-state-${note.id}`, JSON.stringify(stateToPersist));
-      } catch (error) {
-        console.error('Error saving quiz state:', error);
+      if (isHidden) {
+        // Generate quiz options
+        const correctWord = normalizedWord;
+        const allWords = note.highlights.map(h => h.word);
+        const uniqueWords = [...new Set(allWords)];
+        
+        // Get 3 random wrong answers
+        const wrongOptions = uniqueWords
+          .filter(w => w !== correctWord)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 3);
+
+        // Create quiz options with one correct and three wrong answers
+        const options: QuizOption[] = [
+          { word: correctWord, isCorrect: true },
+          ...wrongOptions.map(word => ({ word, isCorrect: false }))
+        ].sort(() => Math.random() - 0.5); // Shuffle options
+
+        setQuizOptions(options);
+        setSelectedWord({ word: normalizedWord, index });
       }
+      return;
     }
-  }, [revealedWords, quizStats, showResults, isQuizMode, note.id]);
 
-  // Show results when all words are revealed
-  useEffect(() => {
-    if (isQuizMode && note.highlights.length > 0) {
-      const allWordsRevealed = note.highlights.every(highlight => 
-        Array.from(revealedWords).some(r => r.word === highlight.word)
-      );
-      if (allWordsRevealed) {
-        setShowResults(true);
-      }
-    }
-  }, [revealedWords, isQuizMode, note.highlights]);
+    const normalizedWord = word.toLowerCase();
+    const newHighlights = note.highlights.some(h => h.word === normalizedWord && h.index === index)
+      ? note.highlights.filter(h => !(h.word === normalizedWord && h.index === index))
+      : [...note.highlights, { word: normalizedWord, index, id: generateHighlightId(normalizedWord, index) }];
 
-  const generateContentHash = (content: string) => {
-    return crypto.createHash('sha256')
-      .update(content.trim().toLowerCase())
-      .digest('hex');
+    onUpdate(note.id, note.content || '', newHighlights, note.title);
   };
 
-  // Check for existing audio in browser storage when note loads
-  useEffect(() => {
-    const checkExistingAudio = async () => {
-      if (!note.content) return;
-      
-      const contentHash = generateContentHash(note.content);
-      const metadata: AudioMetadata = {
-        noteId: note.id,
-        contentHash,
-        timestamp: Date.now(),
-        title: note.title
-      };
+  const handleQuizOptionClick = (option: QuizOption) => {
+    if (!selectedWord) return;
 
-      const audioBlob = await audioStorage.getAudio(metadata);
-      
-      if (audioBlob) {
-        const url = URL.createObjectURL(audioBlob);
-        setAudioUrl(url);
-        setCurrentContentHash(contentHash);
-        setAudioMetadata(metadata);
-        setIsAudioReady(true);
-      }
-    };
+    setSelectedOption(option.word);
 
-    checkExistingAudio();
-  }, [note.id, note.content, note.title]);
+    const newStats = { ...quizStats };
+    newStats.total += 1;
+    if (option.isCorrect) {
+      newStats.correct += 1;
+      setRevealedWords(prev => new Set([...prev, `${selectedWord.word}-${selectedWord.index}`]));
+      // Reset after a short delay to show the correct answer
+      setTimeout(() => {
+        setSelectedWord(null);
+        setSelectedOption(null);
+        setWrongOptions(new Set());
+      }, 1000);
+    } else {
+      newStats.wrong += 1;
+      setQuizStats(newStats);
+      setWrongOptions(prev => new Set([...prev, option.word]));
+    }
+  };
 
-  const generateAudio = async (content: string) => {
+  const handleSave = async (id: string, title: string, content: string) => {
     try {
-      setIsProcessing(true);
-      setIsAudioReady(false);
-      
-      // Delete old audio if it exists
-      if (currentContentHash) {
-        await audioStorage.deleteAudio(note.id);
-      }
-
-      const contentHash = generateContentHash(content);
-      const metadata: AudioMetadata = {
-        noteId: note.id,
-        contentHash,
-        timestamp: Date.now(),
-        title: note.title
-      };
-
-      const response = await fetch('/api/tts', {
+      // Process highlights on the backend
+      const highlightResponse = await fetch('/api/notes/highlights', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          text: content,
-          metadata
+          content,
+          highlights: note.highlights
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to convert text to speech');
+      if (!highlightResponse.ok) {
+        throw new Error('Failed to process highlights');
       }
 
-      const audioBlob = await response.blob();
-      
-      // Save to browser storage with metadata
-      await audioStorage.saveAudio(metadata, audioBlob);
-      
-      // Create URL for playback
-      const url = URL.createObjectURL(audioBlob);
-      setAudioUrl(url);
-      setCurrentContentHash(contentHash);
-      setAudioMetadata(metadata);
-      setIsAudioReady(true);
-      toast.success('Audio generated successfully');
+      const { highlights: updatedHighlights } = await highlightResponse.json();
+
+      // Update the note with processed highlights
+      onUpdate(id, content, updatedHighlights, title);
+      setIsEditing(false);
     } catch (error) {
-      console.error('Text-to-speech error:', error);
-      toast.error('Failed to generate audio');
-    } finally {
-      setIsProcessing(false);
+      console.error('Error saving note:', error);
+      toast.error('Failed to save note');
     }
   };
 
-  const handlePlayAudio = async () => {
-    if (!audioUrl) {
-      if (!note.content) return;
-      try {
-        await generateAudio(note.content);
-        return;
-      } catch (error) {
-        toast.error('Failed to generate audio');
-        return;
-      }
+  const renderWord = (word: string, index: number) => {
+    const normalizedWord = word.toLowerCase();
+    const isHighlighted = note.highlights.some(h => h.word === normalizedWord && h.index === index);
+    const shouldHide = isQuizMode && isHighlighted && !revealedWords.has(`${normalizedWord}-${index}`);
+
+    if (isQuizMode && isHighlighted && shouldHide) {
+      return (
+        <Popover key={`${word}-${index}`}>
+          <PopoverTrigger asChild>
+            <span
+              className="cursor-pointer select-none px-0.5 mx-0.5 rounded text-transparent underline bg-yellow-200 dark:bg-yellow-800"
+              onClick={() => {
+                // Generate quiz options
+                const correctWord = normalizedWord;
+                const allWords = note.highlights.map(h => h.word);
+                const uniqueWords = [...new Set(allWords)];
+                
+                // Get 3 random wrong answers
+                const wrongOptions = uniqueWords
+                  .filter(w => w !== correctWord)
+                  .sort(() => Math.random() - 0.5)
+                  .slice(0, 3);
+
+                // Create quiz options with one correct and three wrong answers
+                const options: QuizOption[] = [
+                  { word: correctWord, isCorrect: true },
+                  ...wrongOptions.map(word => ({ word, isCorrect: false }))
+                ].sort(() => Math.random() - 0.5); // Shuffle options
+
+                setQuizOptions(options);
+                setSelectedWord({ word: normalizedWord, index });
+                setSelectedOption(null);
+                setWrongOptions(new Set());
+              }}
+            >
+              {word}
+            </span>
+          </PopoverTrigger>
+          <PopoverContent className="w-80">
+            <div className="space-y-4">
+              <h4 className="font-medium">Select the correct word:</h4>
+              <div className="grid grid-cols-2 gap-2">
+                {quizOptions.map((option, index) => (
+                  <Button
+                    key={index}
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start",
+                      selectedOption === option.word && (
+                        option.isCorrect 
+                          ? "bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:border-green-500 dark:text-green-400"
+                          : "bg-red-100 border-red-500 text-red-700 dark:bg-red-900/30 dark:border-red-500 dark:text-red-400"
+                      )
+                    )}
+                    onClick={() => handleQuizOptionClick(option)}
+                    disabled={wrongOptions.has(option.word)}
+                  >
+                    {option.word}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      );
     }
 
-    if (!audioRef.current) {
-      audioRef.current = new Audio(audioUrl);
-    }
-
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleSeek = (seconds: number) => {
-    if (!audioRef.current) return;
-    const newTime = audioRef.current.currentTime + seconds;
-    audioRef.current.currentTime = Math.max(0, Math.min(newTime, audioRef.current.duration));
-  };
-
-  // Update audio event listeners when audioUrl changes
-  useEffect(() => {
-    if (!audioUrl) return;
-
-    if (!audioRef.current) {
-      audioRef.current = new Audio(audioUrl);
-    }
-
-    const audio = audioRef.current;
-
-    const handleEnded = () => {
-      setIsPlaying(false);
-      audio.currentTime = 0;
-    };
-
-    const handleError = () => {
-      toast.error('Failed to play audio');
-      setIsPlaying(false);
-    };
-
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('error', handleError);
-
-    return () => {
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('error', handleError);
-      audio.pause();
-      audio.currentTime = 0;
-    };
-  }, [audioUrl]);
-
-  // Save tab state when note is opened
-  useEffect(() => {
-    try {
-      const existingTabs = localStorage.getItem('open-tabs');
-      const tabsState: PersistedTabsState = existingTabs ? JSON.parse(existingTabs) : { openTabs: [] };
-      
-      // Remove this note if it exists
-      tabsState.openTabs = tabsState.openTabs.filter(tab => tab.id !== note.id);
-      
-      // Add this note to the beginning
-      tabsState.openTabs.unshift({
-        id: note.id,
-        title: note.title,
-        lastOpened: Date.now()
-      });
-      
-      // Keep only the last 5 tabs
-      tabsState.openTabs = tabsState.openTabs.slice(0, 5);
-      
-      localStorage.setItem('open-tabs', JSON.stringify(tabsState));
-    } catch (error) {
-      console.error('Error saving tab state:', error);
-    }
-  }, [note.id, note.title]);
-
-  // Clean up tab state when note is deleted
-  const handleDelete = async () => {
-    try {
-      // Delete audio from browser storage
-      if (audioMetadata) {
-        await audioStorage.deleteAudio(audioMetadata.noteId);
-      }
-      
-      // Clean up the current audio URL
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
-        setAudioUrl(null);
-      }
-      setCurrentContentHash(null);
-      setAudioMetadata(null);
-      
-      // Remove from open tabs
-      const existingTabs = localStorage.getItem('open-tabs');
-      if (existingTabs) {
-        const tabsState: PersistedTabsState = JSON.parse(existingTabs);
-        tabsState.openTabs = tabsState.openTabs.filter(tab => tab.id !== note.id);
-        localStorage.setItem('open-tabs', JSON.stringify(tabsState));
-      }
-      
-      // Then delete the note
-      onDelete(note.id);
-    } catch (error) {
-      console.error('Error deleting note:', error);
-      toast.error('Failed to delete note');
-    }
-  };
-
-  // Update isEditing state when prop changes
-  useEffect(() => {
-    setIsEditing(initialIsEditing);
-  }, [initialIsEditing]);
-
-  const handleMouseDown = (word: string, noteId: string) => {
-    // Clear any existing timeout
-    if (highlightTimeout) {
-      clearTimeout(highlightTimeout);
-    }
-    
-    // Set new timeout for 200ms
-    const timeout = setTimeout(() => {
-      setHighlightedWords(prev => new Set([...prev, word]));
-      setSelectedNoteId(noteId);
-    }, 200);
-    
-    setHighlightTimeout(timeout);
-  };
-
-  const handleMouseUp = async () => {
-    // Clear the timeout if mouse is released before 200ms
-    if (highlightTimeout) {
-      clearTimeout(highlightTimeout);
-      setHighlightTimeout(null);
-    }
-
-    if (highlightedWords.size > 0 && selectedNoteId) {
-      const currentHighlights = new Set(note.highlights.map(h => h.word));
-      const newHighlights = new Set<Highlight>();
-
-      // Process each highlighted word
-      highlightedWords.forEach(word => {
-        if (currentHighlights.has(word)) {
-          // Remove highlight if word is already highlighted
-          currentHighlights.delete(word);
-        } else {
-          // Add highlight if word is not highlighted
-          newHighlights.add({ word });
-        }
-      });
-
-      // Combine remaining current highlights with new highlights
-      const updatedHighlights = [
-        ...Array.from(currentHighlights).map(word => ({ word })),
-        ...Array.from(newHighlights)
-      ];
-
-      onUpdate(selectedNoteId, note.content || '', updatedHighlights, note.title);
-      setHighlightedWords(new Set());
-      setSelectedNoteId(null);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    // Clear the timeout if mouse leaves before 200ms
-    if (highlightTimeout) {
-      clearTimeout(highlightTimeout);
-      setHighlightTimeout(null);
-    }
-    setHighlightedWords(new Set());
-    setSelectedNoteId(null);
-  };
-
-  const handleSave = async (id: string, title: string, content: string) => {
-    const updatedHighlights = note.highlights.filter(highlight => 
-      content.includes(highlight.word)
+    return (
+      <span
+        key={`${word}-${index}`}
+        onClick={() => handleWordClick(word, index)}
+        className={cn(
+          "cursor-pointer select-none px-0.5 mx-0.5 rounded",
+          isHighlighted && "bg-yellow-200 dark:bg-yellow-800",
+          shouldHide && "text-transparent underline"
+        )}
+      >
+        {word}
+      </span>
     );
-    onUpdate(id, content, updatedHighlights, title);
-    setIsEditing(false);
-    
-    // Generate new audio after content is edited
-    if (content) {
-      await generateAudio(content);
-    }
   };
 
-  // Clean up object URLs when component unmounts
-  useEffect(() => {
-    return () => {
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
+  const renderContent = (content: string) => {
+    // Split content into words while preserving markdown
+    const words = content.split(/(\s+)/);
+    return words.map((word, index) => {
+      // Skip rendering for whitespace
+      if (word.trim() === '') {
+        return word;
       }
-    };
-  }, [audioUrl]);
-
-  // Clean up tab state when component unmounts
-  useEffect(() => {
-    return () => {
-      try {
-        const existingTabs = localStorage.getItem('open-tabs');
-        if (existingTabs) {
-          const tabsState: PersistedTabsState = JSON.parse(existingTabs);
-          // Remove this note from open tabs
-          tabsState.openTabs = tabsState.openTabs.filter(tab => tab.id !== note.id);
-          localStorage.setItem('open-tabs', JSON.stringify(tabsState));
-        }
-      } catch (error) {
-        console.error('Error cleaning up tab state:', error);
-      }
-    };
-  }, [note.id]);
-
-  const generateQuizOptions = (correctWord: string) => {
-    const otherWords = allWords.filter(word => word !== correctWord);
-    const randomWords = otherWords
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 3);
-    
-    const options = [
-      { word: correctWord, isCorrect: true },
-      ...randomWords.map(word => ({ word, isCorrect: false }))
-    ].sort(() => Math.random() - 0.5);
-
-    setQuizOptions(options);
-  };
-
-  const handleWordClick = (word: string, element: HTMLSpanElement, index: number) => {
-    if (!isQuizMode) return;
-    
-    // Only show popover for highlighted words
-    const isHighlighted = note.highlights.some(h => h.word === word);
-    if (!isHighlighted) return;
-    
-    // Reset states before opening new popover
-    setWrongAnswers(new Set());
-    setQuizOptions([]);
-    
-    const rect = element.getBoundingClientRect();
-    setPopoverPosition({
-      x: rect.left,
-      y: rect.bottom + window.scrollY
+      return renderWord(word, index);
     });
-    setSelectedWord({ word, index });
-    generateQuizOptions(word);
   };
-
-  const handleOptionSelect = (option: QuizOption) => {
-    if (option.isCorrect && selectedWord) {
-      toast.success('Correct!');
-      setRevealedWords(prev => new Set([...prev, selectedWord]));
-      setQuizStats(prev => ({
-        ...prev,
-        correct: prev.correct + 1,
-        total: prev.total + 1
-      }));
-      setSelectedWord(null);
-      setPopoverPosition(null);
-      setWrongAnswers(new Set());
-    } else {
-      toast.error('Incorrect!');
-      setWrongAnswers(prev => new Set([...prev, option.word]));
-      setQuizStats(prev => ({
-        ...prev,
-        wrong: prev.wrong + 1,
-        total: prev.total + 1
-      }));
-    }
-  };
-
-  // Add click outside handler
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (popoverPosition && optionsRef.current && !optionsRef.current.contains(event.target as Node)) {
-        setSelectedWord(null);
-        setPopoverPosition(null);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [popoverPosition]);
 
   const handleAIResponse = async (response: string) => {
     try {
+      setIsTyping(true);
+      setCurrentTypingText(note.content || ''); // Start with existing content
+      
       // Get key terms from AI
       const keyTermsResponse = await fetch('/api/chat', {
         method: 'POST',
@@ -645,25 +354,41 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
 
       const { keyTerms } = await keyTermsResponse.json();
       
-      // Create highlights from key terms
-      const newHighlights = keyTerms.map((term: string) => ({ word: term.toLowerCase() }));
+      // Create highlights from key terms, finding their positions in the content
+      const words = (note.content || '').split(' ');
+      const newHighlights = keyTerms
+        .map((term: string) => {
+          const normalizedTerm = term.toLowerCase();
+          const index = words.findIndex((word, idx) => 
+            word.toLowerCase() === normalizedTerm && 
+            !note.highlights.some(h => h.index === idx)
+          );
+          return index !== -1 ? { 
+            word: normalizedTerm, 
+            index,
+            id: generateHighlightId(normalizedTerm, index)
+          } : null;
+        })
+        .filter((h: Highlight | null): h is Highlight => h !== null);
 
-      // Combine existing highlights with new ones, avoiding duplicates
-      const existingHighlightWords = new Set(note.highlights.map(h => h.word));
-      const updatedHighlights = [
-        ...note.highlights,
-        ...newHighlights.filter(h => !existingHighlightWords.has(h.word))
-      ];
+      // Combine existing highlights with new ones
+      const updatedHighlights = [...note.highlights, ...newHighlights];
 
       // Format the response with proper spacing
       const formattedResponse = `\n\n---\n\n${response}`;
 
-      // Update note with new content and highlights
-      if (note.content) {
-        onUpdate(note.id, note.content + formattedResponse, updatedHighlights, note.title);
-      } else {
-        onUpdate(note.id, response, updatedHighlights, note.title);
+      // Type out the response word by word
+      const wordsToType = formattedResponse.split(/(\s+)/);
+      let currentText = note.content || '';
+      
+      for (const word of wordsToType) {
+        await new Promise(resolve => setTimeout(resolve, 30)); // Slightly faster typing speed
+        currentText += word;
+        setCurrentTypingText(currentText);
       }
+
+      // Update note with new content and highlights
+      onUpdate(note.id, currentText, updatedHighlights, note.title);
     } catch (error) {
       console.error('Error extracting key terms:', error);
       toast.error('Failed to extract key terms');
@@ -674,8 +399,128 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
       } else {
         onUpdate(note.id, response, note.highlights, note.title);
       }
+    } finally {
+      setIsTyping(false);
     }
   };
+
+  const handleDelete = async () => {
+    try {
+      onDelete(note.id);
+    } catch (error) {
+      console.error('Error deleting note:', error);
+      toast.error('Failed to delete note');
+    }
+  };
+
+  const handleTTS = async () => {
+    if (!note.content) return;
+
+    try {
+      setIsLoading(true);
+      
+      // Generate content hash
+      const contentHash = crypto.createHash('md5').update(note.content).digest('hex');
+      
+      // Check if we have cached audio
+      const metadata: AudioMetadata = {
+        noteId: note.id,
+        contentHash,
+        timestamp: Date.now(),
+        title: note.title
+      };
+      
+      const cachedAudio = await audioStorage.getAudio(metadata);
+      
+      if (cachedAudio) {
+        const url = URL.createObjectURL(cachedAudio);
+        setAudioUrl(url);
+        setHasAudio(true);
+        if (audioRef.current) {
+          audioRef.current.src = url;
+          audioRef.current.play();
+          setIsPlaying(true);
+        }
+        return;
+      }
+
+      // Generate new audio
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: note.content,
+          noteId: note.id
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate speech');
+      }
+
+      const audioBlob = await response.blob();
+      
+      // Cache the audio before creating URL
+      await audioStorage.saveAudio(metadata, audioBlob);
+      
+      const url = URL.createObjectURL(audioBlob);
+      setAudioUrl(url);
+      setHasAudio(true);
+      if (audioRef.current) {
+        audioRef.current.src = url;
+        audioRef.current.play();
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error('TTS error:', error);
+      toast.error('Failed to generate speech');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePlayPause = () => {
+    if (!audioRef.current || !audioUrl) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleAudioEnded = () => {
+    setIsPlaying(false);
+  };
+
+  const handleRewind = () => {
+    if (!audioRef.current) return;
+    const newTime = Math.max(0, audioRef.current.currentTime - 5);
+    audioRef.current.currentTime = newTime;
+  };
+
+  const handleForward = () => {
+    if (!audioRef.current) return;
+    const newTime = Math.min(audioRef.current.duration, audioRef.current.currentTime + 5);
+    audioRef.current.currentTime = newTime;
+  };
+
+  // Add scroll to bottom function
+  const scrollToBottom = () => {
+    if (contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }
+  };
+
+  // Add effect to scroll when typing
+  useEffect(() => {
+    if (isTyping) {
+      scrollToBottom();
+    }
+  }, [currentTypingText, isTyping]);
 
   if (isEditing) {
     return (
@@ -688,484 +533,132 @@ export function NoteCard({ note, onDelete, onUpdate, isEditing: initialIsEditing
   }
 
   return (
-    <>
-      <Card className="flex flex-col h-[calc(88vh-2rem)]">
-        <CardHeader className="flex-shrink-0">
-          <CardTitle>
-            <div className='flex justify-between items-center'>
-              {note.title}
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleSeek(-10)}
-                    disabled={!audioUrl || isProcessing}
-                  >
-                    <Rewind className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={handlePlayAudio}
-                    disabled={!note.content || isProcessing}
-                  >
-                    {isProcessing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : isPlaying ? (
-                      <Pause className="h-4 w-4" />
-                    ) : (
-                      <Play className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleSeek(10)}
-                    disabled={!audioUrl || isProcessing}
-                  >
-                    <FastForward className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant={isQuizMode ? "default" : "outline"}
-                    size="icon"
-                    onClick={() => {
-                      setIsQuizMode(!isQuizMode);
-                      if (!isQuizMode) {
-                        setRevealedWords(new Set());
-                        setWrongAnswers(new Set());
-                      }
-                    }}
-                  >
-                    <BookOpen className="h-4 w-4" />
-                  </Button>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setIsEditing(true)}>
-                      <Edit2 className="h-4 w-4 mr-2" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={handleDelete}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent onMouseLeave={handleMouseLeave} className="flex-1 overflow-hidden">
-          <div className="flex gap-4 h-full">
-            <div className="flex-1 overflow-y-auto">
-              <div className="prose prose-sm max-w-none dark:prose-invert pb-4">
-                <ReactMarkdown
-                  components={{
-                    p: ({ children }) => {
-                      if (typeof children !== 'string') {
-                        return <div>{children}</div>;
-                      }
-                      return (
-                        <div>
-                          {children.split(' ').map((word, index, array) => {
-                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
-                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
-              const isLastWord = index === array.length - 1;
-              
-              return (
-                <span
-                  key={index}
-                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
-                  onMouseUp={handleMouseUp}
-                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
-                  style={{ 
-                    cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
-                    backgroundColor: isHighlighted ? 'yellow' : 'transparent',
-                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
-                    color: shouldHide ? 'transparent' : 'inherit',
-                    textDecoration: shouldHide ? 'underline' : 'none',
-                    userSelect: 'none',
-                    padding: isHighlighted ? '0 2px' : '0',
-                    margin: isHighlighted ? '0 1px' : '0',
-                    borderRadius: isHighlighted ? '2px' : '0'
-                  }}
-                >
-                  {word}{!isLastWord && ' '}
-                </span>
-              );
-            })}
-                        </div>
-                      );
-                    },
-                    ul: ({ children }) => <ul className="list-disc pl-6 my-2">{children}</ul>,
-                    ol: ({ children }) => <ol className="list-decimal pl-6 my-2">{children}</ol>,
-                    li: ({ children }) => {
-                      // Handle both string and array of children
-                      const processContent = (content: any): React.ReactNode => {
-                        if (typeof content === 'string') {
-                          return content.split(' ').map((word, index, array) => {
-                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
-                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
-                            const isLastWord = index === array.length - 1;
-                            
-                            return (
-                              <span
-                                key={index}
-                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
-                                onMouseUp={handleMouseUp}
-                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
-                                style={{ 
-                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
-                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
-                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
-                                  color: shouldHide ? 'transparent' : 'inherit',
-                                  textDecoration: shouldHide ? 'underline' : 'none',
-                                  userSelect: 'none',
-                                  padding: isHighlighted ? '0 2px' : '0',
-                                  margin: isHighlighted ? '0 1px' : '0',
-                                  borderRadius: isHighlighted ? '2px' : '0'
-                                }}
-                              >
-                                {word}{!isLastWord && ' '}
-                              </span>
-                            );
-                          });
-                        }
-                        
-                        if (Array.isArray(content)) {
-                          return content.map((item, index) => (
-                            <span key={index}>
-                              {processContent(item)}
-                              {index < content.length - 1 && ' '}
-                            </span>
-                          ));
-                        }
-                        
-                        return content;
-                      };
-
-                      return (
-                        <li className="my-1">
-                          {processContent(children)}
-                        </li>
-                      );
-                    },
-                    h1: ({ children }) => {
-                      if (typeof children !== 'string') {
-                        return <h1 className="text-2xl font-bold mt-4 mb-2">{children}</h1>;
-                      }
-                      return (
-                        <h1 className="text-2xl font-bold mt-4 mb-2">
-                          {children.split(' ').map((word, index, array) => {
-                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
-                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
-                            const isLastWord = index === array.length - 1;
-                            
-                            return (
-                              <span
-                                key={index}
-                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
-                                onMouseUp={handleMouseUp}
-                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
-                                style={{ 
-                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
-                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
-                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
-                                  color: shouldHide ? 'transparent' : 'inherit',
-                                  textDecoration: shouldHide ? 'underline' : 'none',
-                                  userSelect: 'none',
-                                  padding: isHighlighted ? '0 2px' : '0',
-                                  margin: isHighlighted ? '0 1px' : '0',
-                                  borderRadius: isHighlighted ? '2px' : '0'
-                                }}
-                              >
-                                {word}{!isLastWord && ' '}
-                              </span>
-                            );
-                          })}
-                        </h1>
-                      );
-                    },
-                    h2: ({ children }) => {
-                      if (typeof children !== 'string') {
-                        return <h2 className="text-xl font-bold mt-4 mb-2">{children}</h2>;
-                      }
-                      return (
-                        <h2 className="text-xl font-bold mt-4 mb-2">
-                          {children.split(' ').map((word, index, array) => {
-                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
-                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
-                            const isLastWord = index === array.length - 1;
-                            
-                            return (
-                              <span
-                                key={index}
-                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
-                                onMouseUp={handleMouseUp}
-                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
-                                style={{ 
-                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
-                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
-                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
-                                  color: shouldHide ? 'transparent' : 'inherit',
-                                  textDecoration: shouldHide ? 'underline' : 'none',
-                                  userSelect: 'none',
-                                  padding: isHighlighted ? '0 2px' : '0',
-                                  margin: isHighlighted ? '0 1px' : '0',
-                                  borderRadius: isHighlighted ? '2px' : '0'
-                                }}
-                              >
-                                {word}{!isLastWord && ' '}
-                              </span>
-                            );
-                          })}
-                        </h2>
-                      );
-                    },
-                    h3: ({ children }) => {
-                      if (typeof children !== 'string') {
-                        return <h3 className="text-lg font-bold mt-3 mb-2">{children}</h3>;
-                      }
-                      return (
-                        <h3 className="text-lg font-bold mt-3 mb-2">
-                          {children.split(' ').map((word, index, array) => {
-                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
-                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
-                            const isLastWord = index === array.length - 1;
-                            
-                            return (
-                              <span
-                                key={index}
-                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
-                                onMouseUp={handleMouseUp}
-                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
-                                style={{ 
-                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
-                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
-                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
-                                  color: shouldHide ? 'transparent' : 'inherit',
-                                  textDecoration: shouldHide ? 'underline' : 'none',
-                                  userSelect: 'none',
-                                  padding: isHighlighted ? '0 2px' : '0',
-                                  margin: isHighlighted ? '0 1px' : '0',
-                                  borderRadius: isHighlighted ? '2px' : '0'
-                                }}
-                              >
-                                {word}{!isLastWord && ' '}
-                              </span>
-                            );
-                          })}
-                        </h3>
-                      );
-                    },
-                    strong: ({ children }) => {
-                      if (typeof children !== 'string') {
-                        return <strong className="font-bold">{children}</strong>;
-                      }
-                      return (
-                        <strong className="font-bold">
-                          {children.split(' ').map((word, index, array) => {
-                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
-                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
-                            const isLastWord = index === array.length - 1;
-                            
-                            return (
-                              <span
-                                key={index}
-                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
-                                onMouseUp={handleMouseUp}
-                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
-                                style={{ 
-                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
-                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
-                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
-                                  color: shouldHide ? 'transparent' : 'inherit',
-                                  textDecoration: shouldHide ? 'underline' : 'none',
-                                  userSelect: 'none',
-                                  padding: isHighlighted ? '0 2px' : '0',
-                                  margin: isHighlighted ? '0 1px' : '0',
-                                  borderRadius: isHighlighted ? '2px' : '0'
-                                }}
-                              >
-                                {word}{!isLastWord && ' '}
-                              </span>
-                            );
-                          })}
-                        </strong>
-                      );
-                    },
-                    em: ({ children }) => {
-                      if (typeof children !== 'string') {
-                        return <em className="italic">{children}</em>;
-                      }
-                      return (
-                        <em className="italic">
-                          {children.split(' ').map((word, index, array) => {
-                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
-                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
-                            const isLastWord = index === array.length - 1;
-                            
-                            return (
-                              <span
-                                key={index}
-                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
-                                onMouseUp={handleMouseUp}
-                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
-                                style={{ 
-                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
-                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
-                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
-                                  color: shouldHide ? 'transparent' : 'inherit',
-                                  textDecoration: shouldHide ? 'underline' : 'none',
-                                  userSelect: 'none',
-                                  padding: isHighlighted ? '0 2px' : '0',
-                                  margin: isHighlighted ? '0 1px' : '0',
-                                  borderRadius: isHighlighted ? '2px' : '0'
-                                }}
-                              >
-                                {word}{!isLastWord && ' '}
-                              </span>
-                            );
-                          })}
-                        </em>
-                      );
-                    },
-                    blockquote: ({ children }) => {
-                      if (typeof children !== 'string') {
-                        return <blockquote className="border-l-4 border-gray-300 pl-4 my-2 italic">{children}</blockquote>;
-                      }
-                      return (
-                        <blockquote className="border-l-4 border-gray-300 pl-4 my-2 italic">
-                          {children.split(' ').map((word, index, array) => {
-                            const isHighlighted = note.highlights.some(h => h.word === word.toLowerCase());
-                            const shouldHide = isQuizMode && isHighlighted && !Array.from(revealedWords).some(r => r.word === word.toLowerCase() && r.index === index);
-                            const isLastWord = index === array.length - 1;
-                            
-                            return (
-                              <span
-                                key={index}
-                                onMouseDown={() => handleMouseDown(word.toLowerCase(), note.id)}
-                                onMouseUp={handleMouseUp}
-                                onClick={(e) => handleWordClick(word.toLowerCase(), e.currentTarget, index)}
-                                style={{ 
-                                  cursor: isQuizMode && isHighlighted ? 'pointer' : 'default',
-                                  backgroundColor: isHighlighted ? 'yellow' : 'transparent',
-                                  opacity: highlightedWords.has(word.toLowerCase()) ? 0.7 : 1,
-                                  color: shouldHide ? 'transparent' : 'inherit',
-                                  textDecoration: shouldHide ? 'underline' : 'none',
-                                  userSelect: 'none',
-                                  padding: isHighlighted ? '0 2px' : '0',
-                                  margin: isHighlighted ? '0 1px' : '0',
-                                  borderRadius: isHighlighted ? '2px' : '0'
-                                }}
-                              >
-                                {word}{!isLastWord && ' '}
-                              </span>
-                            );
-                          })}
-                        </blockquote>
-                      );
-                    },
-                    code: ({ children }) => <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{children}</code>,
-                    pre: ({ children }) => <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded my-2 overflow-x-auto">{children}</pre>,
-                  }}
-                >
-                  {note.content || ''}
-                </ReactMarkdown>
-              </div>
-             
-          {showResults && (
-            <div className="mt-4 p-4 bg-muted rounded-lg">
-              <h3 className="text-lg font-semibold mb-2">Quiz Results</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-green-600">Correct Answers: {quizStats.correct}</p>
-                  <p className="text-red-600">Wrong Answers: {quizStats.wrong}</p>
-                </div>
-                <div>
-                  <p>Total Attempts: {quizStats.total}</p>
-                  <p>Accuracy: {Math.round((quizStats.correct / quizStats.total) * 100)}%</p>
-                </div>
-              </div>
-              <Button 
-                variant="outline" 
-                className="mt-4"
-                onClick={() => {
-                  setShowResults(false);
-                  setRevealedWords(new Set());
-                  setQuizStats({ correct: 0, wrong: 0, total: 0 });
-                }}
+    <Card className="flex flex-col h-[calc(88vh-2rem)]">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-xl font-bold">{note.title}</CardTitle>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={isQuizMode ? "default" : "outline"}
+            size="icon"
+            onClick={() => {
+              setIsQuizMode(!isQuizMode);
+              if (!isQuizMode) {
+                setRevealedWords(new Set());
+                setQuizStats({ correct: 0, wrong: 0, total: 0 });
+              }
+            }}
+          >
+            <BookOpen className="h-4 w-4" />
+          </Button>
+          {!hasAudio ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleTTS}
+              disabled={isLoading || !note.content}
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+            </Button>
+          ) : (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRewind}
+                disabled={!audioRef.current}
               >
-                Try Again
+                <Rewind className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handlePlayPause}
+              >
+                {isPlaying ? (
+                  <Pause className="h-4 w-4" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleForward}
+                disabled={!audioRef.current}
+              >
+                <FastForward className="h-4 w-4" />
               </Button>
             </div>
           )}
-            </div>
-
-            <div className="w-64 flex-shrink-0 border-l pl-4">
-              <h3 className="text-lg font-semibold mb-4">Highlights</h3>
-              <div className="space-y-2 overflow-y-auto max-h-[calc(100vh-16rem)]">
-                {note.highlights.map((highlight, index) => (
-                  <div
-                    key={index}
-                    className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-md text-sm"
-                  >
-                    {highlight.word}
-                  </div>
-                ))}
-                {note.highlights.length === 0 && (
-                  <p className="text-muted-foreground text-sm">No highlights yet</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-        <CardFooter className='sticky bottom-0 bg-gray-100 pt-4 mt-4 border-t w-full'> <div className="w-full">
-                <AIChatInput onResponse={handleAIResponse} />
-              </div></CardFooter>
-      </Card>
-
-      {popoverPosition && selectedWord && typeof window !== 'undefined' && createPortal(
-        <div
-          ref={optionsRef}
-          style={{
-            position: 'fixed',
-            left: popoverPosition.x,
-            top: popoverPosition.y,
-            zIndex: 50
-          }}
-        >
-          <div className="bg-white rounded-lg shadow-lg p-2 w-48">
-            <div className="grid gap-1">
-              {quizOptions.map((option, index) => (
-                <Button
-                  key={index}
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    "justify-start text-sm w-full",
-                    wrongAnswers.has(option.word) && "bg-red-100 text-red-600 hover:bg-red-100 hover:text-red-600"
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                <Edit2 className="h-4 w-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleDelete}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </CardHeader>
+      <CardContent className="flex-1 overflow-hidden">
+        <div className="flex gap-4 h-full">
+          <div className="flex-1 overflow-y-auto" ref={contentRef}>
+            <div className="prose prose-sm max-w-none dark:prose-invert pb-4">
+              {note.content && (
+                <div className="whitespace-pre-wrap">
+                  {isTyping ? (
+                    <>
+                      {renderContent(currentTypingText)}
+                      <span className="animate-pulse">▋</span>
+                    </>
+                  ) : (
+                    renderContent(note.content)
                   )}
-                  onClick={() => handleOptionSelect(option)}
-                  disabled={wrongAnswers.has(option.word)}
-                >
-                  {option.word}
-                </Button>
-              ))}
+                </div>
+              )}
             </div>
           </div>
-        </div>,
-        document.body
-      )}
-    </>
+          <div className="w-64 flex-shrink-0 border-l pl-4">
+            <h3 className="text-lg font-semibold mb-4">Highlights</h3>
+            <div className="space-y-2 overflow-y-auto max-h-[calc(100vh-16rem)]">
+              {note.highlights.map((highlight) => (
+                <div
+                  key={highlight.id}
+                  className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-md text-sm"
+                >
+                  {highlight.word}
+                </div>
+              ))}
+              {note.highlights.length === 0 && (
+                <p className="text-muted-foreground text-sm">No highlights yet</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+      <CardFooter className='sticky bottom-0 bg-gray-100 pt-4 mt-4 border-t w-full'>
+        <div className="w-full">
+          <AIChatInput onResponse={handleAIResponse} disabled={isTyping} />
+        </div>
+      </CardFooter>
+      <audio
+        ref={audioRef}
+        onEnded={handleAudioEnded}
+        className="hidden"
+      />
+    </Card>
   );
 } 

@@ -7,9 +7,10 @@ import { Textarea } from '@/components/ui/textarea';
 
 interface AIChatInputProps {
   onResponse: (response: string) => void;
+  disabled?: boolean;
 }
 
-export function AIChatInput({ onResponse }: AIChatInputProps) {
+export function AIChatInput({ onResponse, disabled = false }: AIChatInputProps) {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [input, setInput] = useState('');
@@ -17,7 +18,7 @@ export function AIChatInput({ onResponse }: AIChatInputProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || disabled) return;
 
     try {
       setIsLoading(true);
@@ -61,13 +62,13 @@ export function AIChatInput({ onResponse }: AIChatInputProps) {
           onKeyDown={handleKeyDown}
           placeholder="Ask AI to help with your notes..."
           className="pr-12 min-h-[40px] focus:min-h-[120px] transition-all duration-200 ease-in-out resize-none"
-          disabled={isLoading}
+          disabled={isLoading || disabled}
         />
         <Button
           type="submit"
           size="icon"
           className="absolute right-2 bottom-2"
-          disabled={isLoading || !input.trim()}
+          disabled={isLoading || !input.trim() || disabled}
         >
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
