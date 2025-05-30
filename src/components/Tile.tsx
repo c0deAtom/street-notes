@@ -34,6 +34,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
   const [currentTypingContent, setCurrentTypingContent] = useState("");
   const [pendingAIResponse, setPendingAIResponse] = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const [isEditingAIResponse, setIsEditingAIResponse] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -46,7 +47,38 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
     onUpdate: ({ editor }) => {
       // Handle content updates
     },
+    editorProps: {
+      attributes: {
+        class: 'prose prose-sm max-w-none focus:outline-none',
+      },
+    },
+    immediatelyRender: false,
   });
+
+  const aiResponseEditor = useEditor({
+    extensions: [
+      StarterKit,
+      Highlight.configure({ multicolor: true }),
+    ],
+    content: currentTypingContent,
+    onUpdate: ({ editor }) => {
+      setCurrentTypingContent(editor.getHTML());
+      setPendingAIResponse(editor.getHTML());
+    },
+    editorProps: {
+      attributes: {
+        class: 'prose prose-sm max-w-none focus:outline-none',
+      },
+    },
+    immediatelyRender: false,
+  });
+
+  // Update AI response editor content when currentTypingContent changes
+  useEffect(() => {
+    if (aiResponseEditor && currentTypingContent) {
+      aiResponseEditor.commands.setContent(currentTypingContent);
+    }
+  }, [aiResponseEditor, currentTypingContent]);
 
   // Update editor content when content prop changes or when switching to edit mode
   useEffect(() => {
@@ -204,6 +236,10 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
     }
   };
 
+  const handleEditAIResponse = () => {
+    setIsEditingAIResponse(true);
+  };
+
   const handleSaveAIResponse = async () => {
     try {
       if (isEditing) {
@@ -220,6 +256,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
       setPendingAIResponse("");
       setCurrentTypingContent("");
       setShowPreview(false);
+      setIsEditingAIResponse(false);
       toast({
         title: "Success",
         description: "AI response saved successfully",
@@ -237,10 +274,11 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
     setPendingAIResponse("");
     setCurrentTypingContent("");
     setShowPreview(false);
+    setIsEditingAIResponse(false);
   };
 
   return (
-    <Card>
+    <Card className="max-h-[900px]">
       <CardHeader className="flex flex-row items-center justify-between">
         {isEditing ? (
           <Input
@@ -386,7 +424,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
                 </Tooltip>
               </TooltipProvider>
             </div>
-            <div className="prose prose-sm max-w-none">
+            <div className="prose prose-sm max-w-360">
               <EditorContent editor={editor} />
             </div>
           </div>
@@ -400,10 +438,112 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
             />
             {showPreview && (
               <div className="space-y-2">
-                <div 
-                  className="prose prose-sm max-w-none p-4 bg-muted/50 rounded-lg"
-                  dangerouslySetInnerHTML={{ __html: currentTypingContent }}
-                />
+                {isEditingAIResponse ? (
+                  <div className="space-y-4 ">
+                    <div className="flex gap-2 p-2 border rounded-md">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Toggle
+                              size="sm"
+                              pressed={aiResponseEditor?.isActive('bold')}
+                              onPressedChange={() => aiResponseEditor?.chain().focus().toggleBold().run()}
+                            >
+                              <Bold className="h-4 w-4" />
+                            </Toggle>
+                          </TooltipTrigger>
+                          <TooltipContent>Bold</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Toggle
+                              size="sm"
+                              pressed={aiResponseEditor?.isActive('italic')}
+                              onPressedChange={() => aiResponseEditor?.chain().focus().toggleItalic().run()}
+                            >
+                              <Italic className="h-4 w-4" />
+                            </Toggle>
+                          </TooltipTrigger>
+                          <TooltipContent>Italic</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Toggle
+                              size="sm"
+                              pressed={aiResponseEditor?.isActive('heading', { level: 1 })}
+                              onPressedChange={() => aiResponseEditor?.chain().focus().toggleHeading({ level: 1 }).run()}
+                            >
+                              <Heading1 className="h-4 w-4" />
+                            </Toggle>
+                          </TooltipTrigger>
+                          <TooltipContent>Heading 1</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Toggle
+                              size="sm"
+                              pressed={aiResponseEditor?.isActive('heading', { level: 2 })}
+                              onPressedChange={() => aiResponseEditor?.chain().focus().toggleHeading({ level: 2 }).run()}
+                            >
+                              <Heading2 className="h-4 w-4" />
+                            </Toggle>
+                          </TooltipTrigger>
+                          <TooltipContent>Heading 2</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Toggle
+                              size="sm"
+                              pressed={aiResponseEditor?.isActive('bulletList')}
+                              onPressedChange={() => aiResponseEditor?.chain().focus().toggleBulletList().run()}
+                            >
+                              <List className="h-4 w-4" />
+                            </Toggle>
+                          </TooltipTrigger>
+                          <TooltipContent>Bullet List</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Toggle
+                              size="sm"
+                              pressed={aiResponseEditor?.isActive('orderedList')}
+                              onPressedChange={() => aiResponseEditor?.chain().focus().toggleOrderedList().run()}
+                            >
+                              <ListOrdered className="h-4 w-4" />
+                            </Toggle>
+                          </TooltipTrigger>
+                          <TooltipContent>Numbered List</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Toggle
+                              size="sm"
+                              pressed={aiResponseEditor?.isActive('highlight')}
+                              onPressedChange={() => aiResponseEditor?.chain().focus().toggleHighlight().run()}
+                            >
+                              <span className="h-4 w-4 bg-yellow-200 rounded-sm">H</span>
+                            </Toggle>
+                          </TooltipTrigger>
+                          <TooltipContent>Highlight</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <div className="prose prose-sm max-w-none">
+                      <EditorContent editor={aiResponseEditor} />
+                    </div>
+                  </div>
+                ) : (
+                  <div 
+                    className="prose prose-sm max-w-none p-4 bg-muted/50 rounded-lg max-h-[500px] overflow-y-auto"
+                    dangerouslySetInnerHTML={{ __html: currentTypingContent }}
+                  />
+                )}
                 <div className="flex gap-2 justify-end">
                   <Button
                     variant="outline"
@@ -412,6 +552,16 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
                   >
                     Discard
                   </Button>
+                  {!isEditingAIResponse && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleEditAIResponse}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit Response
+                    </Button>
+                  )}
                   <Button
                     variant="default"
                     size="sm"

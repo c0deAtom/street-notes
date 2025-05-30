@@ -30,9 +30,17 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   const { id } = await request.json();
-  await prisma.note.delete({
-    where: { id },
+  
+  // First delete all tiles associated with the note
+  await prisma.tile.deleteMany({
+    where: { noteId: id }
   });
+  
+  // Then delete the note
+  await prisma.note.delete({
+    where: { id }
+  });
+  
   return NextResponse.json({ success: true });
 }
 
@@ -40,7 +48,7 @@ export async function PATCH(request: Request) {
   const { id, highlights, content, title } = await request.json();
   const note = await prisma.note.update({
     where: { id },
-    data: {  content, title },
+    data: { content, title },
     include: {
       tiles: {
         orderBy: {

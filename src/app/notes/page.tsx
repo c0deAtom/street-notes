@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { NoteCard } from '@/components/NoteCard';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { X } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
 interface Highlight {
   word: string;
@@ -33,18 +36,54 @@ export default function NotesPage() {
   const [content, setContent] = useState('');
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isCreatingNote, setIsCreatingNote] = useState(false);
+  const [openTabs, setOpenTabs] = useState<Note[]>([]);
+  const [activeTab, setActiveTab] = useState<string | undefined>(undefined);
+  const { toast } = useToast();
 
+  // Load saved tabs from localStorage on initial mount
   useEffect(() => {
     fetchNotes();
+    const savedTabs = localStorage.getItem('openTabs');
+    const savedActiveTab = localStorage.getItem('activeTab');
+    
+    if (savedTabs) {
+      try {
+        const parsedTabs = JSON.parse(savedTabs);
+        setOpenTabs(parsedTabs);
+        
+        // If we have a saved active tab, find the corresponding note
+        if (savedActiveTab) {
+          const activeNote = parsedTabs.find((tab: Note) => tab.id === savedActiveTab);
+          if (activeNote) {
+            setSelectedNote(activeNote);
+            setActiveTab(savedActiveTab);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to parse saved tabs:', error);
+      }
+    }
   }, []);
+
+  // Save tabs to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('openTabs', JSON.stringify(openTabs));
+    localStorage.setItem('activeTab', activeTab || '');
+  }, [openTabs, activeTab]);
 
   useEffect(() => {
     if (selectedNote) {
       const updatedNote = notes.find(note => note.id === selectedNote.id);
       if (updatedNote) {
         setSelectedNote(updatedNote);
+        // Update the note in openTabs if it exists
+        setOpenTabs(prevTabs => 
+          prevTabs.map(tab => 
+            tab.id === updatedNote.id ? updatedNote : tab
+          )
+        );
       }
     }
   }, [notes]);
@@ -56,15 +95,12 @@ export default function NotesPage() {
   };
 
   const createBlankNote = async () => {
-    // Prevent multiple simultaneous note creations
     if (isCreatingNote) return;
     
     try {
       setIsCreatingNote(true);
-      // Fetch latest notes to ensure we have the most up-to-date list
       await fetchNotes();
       
-      // Find the highest Untitled_X number in existing notes
       const untitledNotes = notes.filter(note => note.title.startsWith('Untitled_'));
       const numbers = untitledNotes.map(note => {
         const match = note.title.match(/Untitled_(\d+)/);
@@ -79,15 +115,42 @@ export default function NotesPage() {
         body: JSON.stringify({ title: newTitle, content: '' }),
       });
       const newNote = await response.json();
-      // Add isNew flag to the note
       const noteWithFlag = { ...newNote, isNew: true };
       setNotes(prevNotes => [noteWithFlag, ...prevNotes]);
       setSelectedNote(noteWithFlag);
       setTitle(newNote.title);
       setContent(newNote.content || '');
       setIsAddingNote(true);
+      
+      // Add to open tabs
+      setOpenTabs(prevTabs => [...prevTabs, noteWithFlag]);
+      setActiveTab(noteWithFlag.id);
     } finally {
       setIsCreatingNote(false);
+    }
+  };
+
+  const handleNoteSelect = (note: Note | null) => {
+    if (!note) return;
+    setSelectedNote(note);
+    // Add to open tabs if not already present
+    if (!openTabs.find(tab => tab.id === note.id)) {
+      setOpenTabs(prevTabs => [...prevTabs, note]);
+    }
+    setActiveTab(note.id);
+  };
+
+  const closeTab = (noteId: string) => {
+    setOpenTabs(prev => prev.filter(note => note.id !== noteId));
+    if (activeTab === noteId) {
+      const remainingTabs = openTabs.filter(note => note.id !== noteId);
+      if (remainingTabs.length > 0) {
+        setActiveTab(remainingTabs[remainingTabs.length - 1].id);
+        setSelectedNote(remainingTabs[remainingTabs.length - 1]);
+      } else {
+        setActiveTab(undefined);
+        setSelectedNote(null);
+      }
     }
   };
 
@@ -115,6 +178,44 @@ export default function NotesPage() {
     if (selectedNote?.id === id) {
       setSelectedNote(null);
     }
+    // Remove from open tabs
+    setOpenTabs(prevTabs => prevTabs.filter(tab => tab.id !== id));
+    if (activeTab === id) {
+      const remainingTabs = openTabs.filter(tab => tab.id !== id);
+      if (remainingTabs.length > 0) {
+        setActiveTab(remainingTabs[remainingTabs.length - 1].id);
+        setSelectedNote(remainingTabs[remainingTabs.length - 1]);
+      } else {
+        setActiveTab(undefined);
+      }
+    }
+  };
+
+  const handleDeleteNotes = async (noteIds: string[]) => {
+    try {
+      // Delete each note
+      await Promise.all(noteIds.map(id => deleteNote(id)));
+      
+      // Remove deleted notes from open tabs
+      setOpenTabs(prev => prev.filter(note => !noteIds.includes(note.id)));
+      
+      // If the active tab was deleted, set the last remaining tab as active
+      if (activeTab && noteIds.includes(activeTab)) {
+        const remainingTabs = openTabs.filter(note => !noteIds.includes(note.id));
+        setActiveTab(remainingTabs.length > 0 ? remainingTabs[remainingTabs.length - 1].id : undefined);
+      }
+
+      toast({
+        title: "Success",
+        description: `Deleted ${noteIds.length} note${noteIds.length > 1 ? 's' : ''}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete notes",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -122,15 +223,46 @@ export default function NotesPage() {
       <Sidebar
         notes={notes}
         selectedNote={selectedNote}
-        onNoteSelect={setSelectedNote}
+        onNoteSelect={handleNoteSelect}
         onAddNote={createBlankNote}
         onExpand={setIsSidebarExpanded}
+        onDeleteNotes={handleDeleteNotes}
       />
       <div 
-        className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out ${
-          isSidebarExpanded ? 'ml-64' : 'ml-16'
-        }`}
+        className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out` }
       >
+        {openTabs.length > 0 && (
+          <div className="border-b">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="w-full justify-start h-10 rounded-none border-b bg-transparent p-0">
+                {openTabs.map((tab) => (
+                  <TabsTrigger
+                    key={tab.id}
+                    value={tab.id}
+                    className="relative h-10 px-4 rounded-none border-r data-[state=active]:bg-background data-[state=active]:shadow-none"
+                    onClick={() => setSelectedNote(tab)}
+                  >
+                    {tab.title}
+                    <div
+                      className="ml-2 hover:bg-muted rounded-sm p-1 cursor-pointer inline-flex items-center justify-center"
+                      onClick={(e) => closeTab(tab.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          closeTab(tab.id);
+                        }
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </div>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+        )}
         {selectedNote ? (
           <div className="p-4 h-full overflow-auto">
             <NoteCard noteId={selectedNote.id} initialTiles={selectedNote.tiles || []} />
