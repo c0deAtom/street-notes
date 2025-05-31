@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Check, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Check, X, Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
 interface Tile {
@@ -30,7 +30,7 @@ interface SidebarProps {
   notes: Note[];
   selectedNote: Note | null;
   onNoteSelect: (note: Note | null) => void;
-  onAddNote: () => void;
+  onAddNote: () => Promise<void>;
   onExpand: (expanded: boolean) => void;
   onDeleteNotes: (noteIds: string[]) => void;
 }
@@ -39,6 +39,7 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
+  const [isAddingNote, setIsAddingNote] = useState(false);
 
   const handleExpand = (expanded: boolean) => {
     setIsExpanded(expanded);
@@ -68,6 +69,15 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
     setIsDeleteMode(false);
   };
 
+  const handleAddNote = async () => {
+    try {
+      setIsAddingNote(true);
+      await onAddNote();
+    } finally {
+      setIsAddingNote(false);
+    }
+  };
+
   return (
     <div 
       className={`h-full border-r bg-background transition-all duration-300 ease-in-out ${
@@ -80,16 +90,19 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
         <div className="p-4 flex items-center justify-between">
           {isExpanded && <h2 className="text-lg font-semibold">Notes</h2>}
           <div className="flex gap-2">
-           
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={onAddNote}
-                className="h-8 w-8"
-              >
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleAddNote}
+              className="h-8 w-8"
+              disabled={isAddingNote}
+            >
+              {isAddingNote ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
                 <Plus className="h-4 w-4" />
-              </Button>
-            
+              )}
+            </Button>
           </div>
         </div>
         <div className="flex-1 overflow-hidden">
@@ -99,10 +112,10 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
               {notes.map((note) => (
                 <Card
                   key={note.id}
-                  className={`cursor-pointer transition-colors h-10 ${
+                  className={`cursor-pointer transition-colors h-10 pt-9  flex items-left justify-center ${
                     selectedNote?.id === note.id && !isDeleteMode
-                      ? 'bg-accent'
-                      : 'hover:bg-accent/50'
+                      ? 'bg-gray-200'
+                      : 'hover:bg-gray-200'
                   } ${isDeleteMode && selectedNotes.includes(note.id) ? 'border-primary' : ''}`}
                   onClick={() => handleNoteSelect(note)}
                 >
@@ -115,7 +128,7 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                           className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
                         />
                       )}
-                      <CardTitle className="text-sm font-medium truncate ">
+                      <CardTitle className="text-sm font-medium truncate text-1xl  ">
                         {isExpanded ? note.title : note.title.charAt(0)}
                       </CardTitle>
                     </div>

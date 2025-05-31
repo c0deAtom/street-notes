@@ -190,7 +190,7 @@ export default function NotesPage() {
                   <TabsTrigger
                     key={tab.id}
                     value={tab.id}
-                    className="relative h-10 px-4 rounded-none border-r data-[state=active]:bg-background data-[state=active]:shadow-none"
+                    className="relative h-10 px-4 rounded-none border-r data-[state=active]:bg-gray-200 data-[state=active]:shadow-none"
                   >
                     {tab.title}
                     <div
