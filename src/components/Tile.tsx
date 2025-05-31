@@ -147,38 +147,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
     
     if (!selectedText) return;
 
-    // Create a temporary span to wrap the selected text
-    const span = document.createElement('span');
-    span.className = 'bg-yellow-200';
-    range.surroundContents(span);
-
-    // Get the updated HTML content
-    const updatedContent = contentRef.current?.innerHTML || '';
-    
-    // Update editor content immediately for instant feedback
-    editor?.commands.setContent(processContent(updatedContent));
-    
-    try {
-      await onUpdate(id, title, updatedContent);
-      toast({
-        title: "Success",
-        description: "Text highlighted successfully",
-      });
-    } catch (error) {
-      // Revert the highlight if the update fails
-      const textNode = document.createTextNode(selectedText);
-      span.parentNode?.replaceChild(textNode, span);
-      editor?.commands.setContent(processContent(contentRef.current?.innerHTML || ''));
-      
-      toast({
-        title: "Error",
-        description: "Failed to highlight text",
-        variant: "destructive",
-      });
-    }
-
-    // Clear the selection
-    selection.removeAllRanges();
+    // Don't clear the selection, let it remain selected
   };
 
   const handleDoubleClick = async (event: React.MouseEvent<HTMLDivElement>) => {
@@ -217,6 +186,46 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
         toast({
           title: "Error",
           description: "Failed to remove highlight",
+          variant: "destructive",
+        });
+      }
+    } else {
+      // Handle double-click to highlight
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) return;
+
+      const range = selection.getRangeAt(0);
+      const selectedText = selection.toString().trim();
+      
+      if (!selectedText) return;
+
+      // Create a temporary span to highlight the selected text
+      const span = document.createElement('mark');
+      span.className = 'bg-yellow-200';
+      range.surroundContents(span);
+
+      // Get the updated HTML content
+      const updatedContent = contentRef.current?.innerHTML || '';
+      
+      // Update editor content immediately for instant feedback
+      editor?.commands.setContent(processContent(updatedContent));
+      
+      try {
+        await onUpdate(id, title, updatedContent);
+        toast({
+          title: "Success",
+          description: "Text highlighted",
+        });
+      } catch (error) {
+        // Revert the change if the update fails
+        const textNode = document.createTextNode(selectedText);
+        span.parentNode?.replaceChild(textNode, span);
+        
+        editor?.commands.setContent(processContent(contentRef.current?.innerHTML || ''));
+        
+        toast({
+          title: "Error",
+          description: "Failed to highlight text",
           variant: "destructive",
         });
       }
@@ -292,10 +301,24 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
         speed += Math.random() * 50;
 
         setCurrentTypingContent(prev => prev + word);
+        // Scroll to bottom after content update
+        setTimeout(() => {
+          const aiResponseDiv = document.querySelector('.ai-response-content');
+          if (aiResponseDiv) {
+            aiResponseDiv.scrollTop = aiResponseDiv.scrollHeight;
+          }
+        }, 0);
         await new Promise(resolve => setTimeout(resolve, speed));
       } else {
         // For whitespace and HTML tags, add a small delay
         setCurrentTypingContent(prev => prev + word);
+        // Scroll to bottom after content update
+        setTimeout(() => {
+          const aiResponseDiv = document.querySelector('.ai-response-content');
+          if (aiResponseDiv) {
+            aiResponseDiv.scrollTop = aiResponseDiv.scrollHeight;
+          }
+        }, 0);
         await new Promise(resolve => setTimeout(resolve, 50));
       }
     }
@@ -633,8 +656,20 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
     };
   }, []);
 
+  const getTileColor = (position: number) => {
+    const colors = [
+      
+      'bg-green-50',
+      'bg-yellow-50',
+      'bg-blue-50',
+      'bg-pink-50',
+      'bg-purple-50'
+    ];
+    return colors[position % colors.length];
+  };
+
   return (
-    <Card className="max-h-[700px]">
+    <Card className={`max-h-[700px] ${getTileColor(position)}`}>
       <CardHeader className="flex flex-row items-center justify-between">
         {isEditing ? (
           <Input
@@ -943,7 +978,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
                       </div>
                     ) : (
                       <div 
-                        className="prose prose-sm max-w-none p-4 bg-muted/50 rounded-lg max-h-[200px] overflow-y-auto"
+                        className="prose prose-sm max-w-none p-4 bg-muted/50 rounded-lg max-h-[400px] overflow-y-auto ai-response-content"
                         dangerouslySetInnerHTML={{ __html: currentTypingContent }}
                       />
                     )}
@@ -1013,9 +1048,9 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
           </>
         )}
         {!isEditing && (
-          <div className="sticky bottom-0 mt-4 border-t pt-4 bg-background">
+        
             <AIChatInput onResponse={handleAIResponse} disabled={isTyping} />
-          </div>
+       
         )}
       </CardContent>
     </Card>

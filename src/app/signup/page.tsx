@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useToast } from "@/components/ui/use-toast";
+import { signIn } from "next-auth/react";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -41,12 +42,24 @@ export default function SignUpPage() {
         throw new Error(data.message || "Something went wrong");
       }
 
-      toast({
-        title: "Success",
-        description: "Account created successfully",
+      // Sign in the user after successful registration
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
       });
 
-      router.push("/login");
+      if (result?.error) {
+        throw new Error("Failed to sign in after registration");
+      }
+
+      toast({
+        title: "Success",
+        description: "Account created and signed in successfully",
+      });
+
+      router.push("/notes");
+      router.refresh();
     } catch (error) {
       toast({
         title: "Error",

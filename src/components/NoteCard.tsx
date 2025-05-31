@@ -114,7 +114,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
   };
 
   return (
-    <div className="relative min-h-[calc(100vh-8rem)] ">
+    <div className="relative min-h-[calc(100vh-8rem)]">
       <div className="absolute top-0 right-0 z-10">
         <Button 
           size="icon" 
@@ -125,7 +125,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
         </Button>
       </div>
 
-      <div className="grid gap-4 pt-16">
+      <div className="grid gap-4 pt-16 max-h-[calc(100vh-8rem)] overflow-y-auto pr-4">
         {tiles.map((tile) => (
           <Tile
             key={tile.id}
