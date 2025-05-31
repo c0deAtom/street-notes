@@ -114,7 +114,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
   };
 
   return (
-    <div className="relative min-h-[calc(100vh-8rem)]">
+    <div className="relative min-h-[calc(100vh-8rem)] ">
       <div className="absolute top-0 right-0 z-10">
         <Button 
           size="icon" 

@@ -327,7 +327,9 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
       } else {
         // If in view mode, append the AI response to the existing content
         const currentContent = contentRef.current?.innerHTML || '';
-        const newContent = currentContent + pendingAIResponse;
+        // Add spacing between content
+        const spacing = '<div class="h-px bg-border my-8"></div>';
+        const newContent = currentContent + spacing + pendingAIResponse;
         await onUpdate(id, title, newContent);
         // Update the editor content if it exists
         editor?.commands.setContent(processContent(newContent));
@@ -565,7 +567,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
   }, []);
 
   return (
-    <Card className="max-h-[900px]">
+    <Card className="max-h-[700px]">
       <CardHeader className="flex flex-row items-center justify-between">
         {isEditing ? (
           <Input
@@ -657,7 +659,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 overflow-y-auto">
         {isEditing ? (
           <div className="space-y-4">
             <div className="flex gap-2 p-2 border rounded-md">
@@ -771,6 +773,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
                 />
                 {showPreview && (
                   <div className="space-y-2">
+                    <div className="h-px bg-border my-4" />
                     {isEditingAIResponse ? (
                       <div className="space-y-4 ">
                         <div className="flex gap-2 p-2 border rounded-md">
@@ -873,7 +876,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
                       </div>
                     ) : (
                       <div 
-                        className="prose prose-sm max-w-none p-4 bg-muted/50 rounded-lg max-h-[400px] overflow-y-auto"
+                        className="prose prose-sm max-w-none p-4 bg-muted/50 rounded-lg max-h-[200px] overflow-y-auto"
                         dangerouslySetInnerHTML={{ __html: currentTypingContent }}
                       />
                     )}
