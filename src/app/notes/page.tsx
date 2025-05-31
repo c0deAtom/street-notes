@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { NoteCard } from '@/components/NoteCard';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -32,9 +32,6 @@ interface Note {
 
 export default function NotesPage() {
   const [notes, setNotes] = useState<Note[]>([]);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [isAddingNote, setIsAddingNote] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [isCreatingNote, setIsCreatingNote] = useState(false);
@@ -53,7 +50,6 @@ export default function NotesPage() {
         const parsedTabs = JSON.parse(savedTabs);
         setOpenTabs(parsedTabs);
         
-        // If we have a saved active tab, find the corresponding note
         if (savedActiveTab) {
           const activeNote = parsedTabs.find((tab: Note) => tab.id === savedActiveTab);
           if (activeNote) {
@@ -73,18 +69,15 @@ export default function NotesPage() {
     localStorage.setItem('activeTab', activeTab || '');
   }, [openTabs, activeTab]);
 
+  // Update notes in tabs when notes change
   useEffect(() => {
-    if (selectedNote) {
-      const updatedNote = notes.find(note => note.id === selectedNote.id);
-      if (updatedNote) {
-        setSelectedNote(updatedNote);
-        // Update the note in openTabs if it exists
-        setOpenTabs(prevTabs => 
-          prevTabs.map(tab => 
-            tab.id === updatedNote.id ? updatedNote : tab
-          )
-        );
-      }
+    if (notes.length > 0) {
+      setOpenTabs(prevTabs => 
+        prevTabs.map(tab => {
+          const updatedNote = notes.find(note => note.id === tab.id);
+          return updatedNote || tab;
+        })
+      );
     }
   }, [notes]);
 
@@ -115,16 +108,12 @@ export default function NotesPage() {
         body: JSON.stringify({ title: newTitle, content: '' }),
       });
       const newNote = await response.json();
-      const noteWithFlag = { ...newNote, isNew: true };
-      setNotes(prevNotes => [noteWithFlag, ...prevNotes]);
-      setSelectedNote(noteWithFlag);
-      setTitle(newNote.title);
-      setContent(newNote.content || '');
-      setIsAddingNote(true);
+      setNotes(prevNotes => [newNote, ...prevNotes]);
+      setSelectedNote(newNote);
       
       // Add to open tabs
-      setOpenTabs(prevTabs => [...prevTabs, noteWithFlag]);
-      setActiveTab(noteWithFlag.id);
+      setOpenTabs(prevTabs => [...prevTabs, newNote]);
+      setActiveTab(newNote.id);
     } finally {
       setIsCreatingNote(false);
     }
@@ -142,30 +131,18 @@ export default function NotesPage() {
 
   const closeTab = (noteId: string) => {
     setOpenTabs(prev => prev.filter(note => note.id !== noteId));
+    
     if (activeTab === noteId) {
       const remainingTabs = openTabs.filter(note => note.id !== noteId);
       if (remainingTabs.length > 0) {
-        setActiveTab(remainingTabs[remainingTabs.length - 1].id);
-        setSelectedNote(remainingTabs[remainingTabs.length - 1]);
+        const lastTab = remainingTabs[remainingTabs.length - 1];
+        setActiveTab(lastTab.id);
+        setSelectedNote(lastTab);
       } else {
         setActiveTab(undefined);
         setSelectedNote(null);
       }
     }
-  };
-
-  const updateNote = async (id: string, content: string, highlights: Highlight[], title: string) => {
-    const response = await fetch('/api/notes', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, content, highlights, title }),
-    });
-    const updatedNote = await response.json();
-    setNotes(prevNotes => 
-      prevNotes.map(note => 
-        note.id === id ? updatedNote : note
-      )
-    );
   };
 
   const deleteNote = async (id: string) => {
@@ -175,36 +152,12 @@ export default function NotesPage() {
       body: JSON.stringify({ id }),
     });
     setNotes(prevNotes => prevNotes.filter(note => note.id !== id));
-    if (selectedNote?.id === id) {
-      setSelectedNote(null);
-    }
-    // Remove from open tabs
-    setOpenTabs(prevTabs => prevTabs.filter(tab => tab.id !== id));
-    if (activeTab === id) {
-      const remainingTabs = openTabs.filter(tab => tab.id !== id);
-      if (remainingTabs.length > 0) {
-        setActiveTab(remainingTabs[remainingTabs.length - 1].id);
-        setSelectedNote(remainingTabs[remainingTabs.length - 1]);
-      } else {
-        setActiveTab(undefined);
-      }
-    }
+    closeTab(id);
   };
 
   const handleDeleteNotes = async (noteIds: string[]) => {
     try {
-      // Delete each note
       await Promise.all(noteIds.map(id => deleteNote(id)));
-      
-      // Remove deleted notes from open tabs
-      setOpenTabs(prev => prev.filter(note => !noteIds.includes(note.id)));
-      
-      // If the active tab was deleted, set the last remaining tab as active
-      if (activeTab && noteIds.includes(activeTab)) {
-        const remainingTabs = openTabs.filter(note => !noteIds.includes(note.id));
-        setActiveTab(remainingTabs.length > 0 ? remainingTabs[remainingTabs.length - 1].id : undefined);
-      }
-
       toast({
         title: "Success",
         description: `Deleted ${noteIds.length} note${noteIds.length > 1 ? 's' : ''}`,
@@ -228,31 +181,23 @@ export default function NotesPage() {
         onExpand={setIsSidebarExpanded}
         onDeleteNotes={handleDeleteNotes}
       />
-      <div 
-        className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out` }
-      >
-        {openTabs.length > 0 && (
-          <div className="border-b">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {openTabs.length > 0 ? (
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
+            <div className="border-b">
               <TabsList className="w-full justify-start h-10 rounded-none border-b bg-transparent p-0">
                 {openTabs.map((tab) => (
                   <TabsTrigger
                     key={tab.id}
                     value={tab.id}
                     className="relative h-10 px-4 rounded-none border-r data-[state=active]:bg-background data-[state=active]:shadow-none"
-                    onClick={() => setSelectedNote(tab)}
                   >
                     {tab.title}
                     <div
                       className="ml-2 hover:bg-muted rounded-sm p-1 cursor-pointer inline-flex items-center justify-center"
-                      onClick={(e) => closeTab(tab.id)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          closeTab(tab.id);
-                        }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTab(tab.id);
                       }}
                     >
                       <X className="h-3 w-3" />
@@ -260,13 +205,15 @@ export default function NotesPage() {
                   </TabsTrigger>
                 ))}
               </TabsList>
-            </Tabs>
-          </div>
-        )}
-        {selectedNote ? (
-          <div className="p-4 h-full overflow-auto">
-            <NoteCard noteId={selectedNote.id} initialTiles={selectedNote.tiles || []} />
-          </div>
+            </div>
+            {openTabs.map((tab) => (
+              <TabsContent key={tab.id} value={tab.id} className="flex-1 mt-0">
+                <div className="p-4 h-full overflow-auto">
+                  <NoteCard noteId={tab.id} initialTiles={tab.tiles || []} />
+                </div>
+              </TabsContent>
+            ))}
+          </Tabs>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-500">
             Select a note or create a new one
