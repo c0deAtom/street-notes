@@ -28,7 +28,7 @@ export default function HomePage() {
   if (status === "unauthenticated") {
     return (
       <div className="container mx-auto p-4 h-[calc(100vh-4rem)]">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center h-full">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center h-full pb-50">
           {/* Left side - Welcome message */}
           <div className="flex flex-col items-center md:items-start justify-center space-y-6 text-center md:text-left">
             <h1 className="text-4xl font-bold">Welcome to ReNotes</h1>

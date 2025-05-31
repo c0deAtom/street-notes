@@ -112,7 +112,7 @@ export function AuthForm() {
   };
 
   return (
-    <Card className="w-[400px]">
+    <Card className="w-[400px] h-[400px]">
       <CardContent className="pt-6">
         <Tabs defaultValue="login" className="w-full">
           <TabsList className="grid w-full grid-cols-2">

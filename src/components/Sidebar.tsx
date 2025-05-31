@@ -99,7 +99,7 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
               {notes.map((note) => (
                 <Card
                   key={note.id}
-                  className={`cursor-pointer transition-colors ${
+                  className={`cursor-pointer transition-colors h-10 ${
                     selectedNote?.id === note.id && !isDeleteMode
                       ? 'bg-accent'
                       : 'hover:bg-accent/50'
@@ -115,7 +115,7 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                           className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
                         />
                       )}
-                      <CardTitle className="text-sm font-medium truncate">
+                      <CardTitle className="text-sm font-medium truncate ">
                         {isExpanded ? note.title : note.title.charAt(0)}
                       </CardTitle>
                     </div>

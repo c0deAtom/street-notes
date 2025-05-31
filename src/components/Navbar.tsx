@@ -35,7 +35,7 @@ export function Navbar() {
   };
 
   return (
-    <nav className="border-b">
+    <nav className="border-b ">
       <div className="flex h-16 items-center px-4 container mx-auto">
         <div className="flex-1">
           <h1 className="text-xl font-bold">ReNotes</h1>
