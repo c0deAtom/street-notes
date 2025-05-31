@@ -155,15 +155,21 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
     // Get the updated HTML content
     const updatedContent = contentRef.current?.innerHTML || '';
     
+    // Update editor content immediately for instant feedback
+    editor?.commands.setContent(processContent(updatedContent));
+    
     try {
       await onUpdate(id, title, updatedContent);
-      // Update editor content to reflect the new highlight
-      editor?.commands.setContent(processContent(updatedContent));
       toast({
         title: "Success",
         description: "Text highlighted successfully",
       });
     } catch (error) {
+      // Revert the highlight if the update fails
+      const textNode = document.createTextNode(selectedText);
+      span.parentNode?.replaceChild(textNode, span);
+      editor?.commands.setContent(processContent(contentRef.current?.innerHTML || ''));
+      
       toast({
         title: "Error",
         description: "Failed to highlight text",
@@ -190,28 +196,23 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
       // Get the updated HTML content
       const updatedContent = contentRef.current?.innerHTML || '';
       
+      // Update editor content immediately for instant feedback
+      editor?.commands.setContent(processContent(updatedContent));
+      
       try {
-        // First update the editor content to ensure consistency
-        editor?.commands.setContent(processContent(updatedContent));
-        
-        // Then update the server
         await onUpdate(id, title, updatedContent);
-        
-        // Force a re-render of the content to ensure highlights are removed
-        if (contentRef.current) {
-          contentRef.current.innerHTML = processContent(updatedContent);
-        }
-
         toast({
           title: "Success",
           description: "Highlight removed",
         });
       } catch (error) {
-        // If there's an error, revert the changes
-        if (contentRef.current) {
-          contentRef.current.innerHTML = processContent(content || '');
-        }
-        editor?.commands.setContent(processContent(content || ''));
+        // Revert the change if the update fails
+        const mark = document.createElement('mark');
+        mark.className = 'bg-yellow-200';
+        textNode.parentNode?.replaceChild(mark, textNode);
+        mark.appendChild(document.createTextNode(text));
+        
+        editor?.commands.setContent(processContent(contentRef.current?.innerHTML || ''));
         
         toast({
           title: "Error",
@@ -364,22 +365,21 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
     try {
       setIsGeneratingAudio(true);
       
-      // Check if we already have the audio in storage
-      const metadata = {
-        noteId: id,
-        contentHash: content,
-        timestamp: Date.now(),
-        title: title
-      };
+      // Create a content hash to check for existing audio
+      const contentHash = await createContentHash(content);
       
-      const existingAudio = await audioStorage.getAudio(metadata);
-      if (existingAudio) {
-        const url = URL.createObjectURL(existingAudio);
-        setAudioUrl(url);
-        return;
+      // Check localStorage for existing audio
+      const savedAudio = localStorage.getItem(`audio_${id}`);
+      if (savedAudio) {
+        const { hash, url } = JSON.parse(savedAudio);
+        if (hash === contentHash) {
+          setAudioUrl(url);
+          setIsGeneratingAudio(false);
+          return;
+        }
       }
 
-      // Generate new audio
+      // Generate new audio only if content has changed
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: {
@@ -396,17 +396,14 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
       }
 
       const audioBlob = await response.blob();
-      const contentHash = response.headers.get('X-Content-Hash');
-      
-      // Save to storage
-      await audioStorage.saveAudio({
-        noteId: id,
-        contentHash: contentHash || content,
-        timestamp: Date.now(),
-        title: title
-      }, audioBlob);
-
       const url = URL.createObjectURL(audioBlob);
+      
+      // Save to localStorage with content hash
+      localStorage.setItem(`audio_${id}`, JSON.stringify({
+        hash: contentHash,
+        url: url
+      }));
+
       setAudioUrl(url);
       
       toast({
@@ -424,6 +421,85 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
       setIsGeneratingAudio(false);
     }
   };
+
+  // Helper function to create a content hash
+  const createContentHash = async (content: string) => {
+    // Create a temporary div to parse HTML
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = content;
+    
+    // Get only the text content, ignoring HTML tags
+    const textContent = tempDiv.textContent || '';
+    
+    const encoder = new TextEncoder();
+    const data = encoder.encode(textContent);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  // Load existing audio when component mounts
+  useEffect(() => {
+    const loadExistingAudio = async () => {
+      if (!content) return;
+      
+      const savedAudio = localStorage.getItem(`audio_${id}`);
+      if (savedAudio) {
+        const { hash, url } = JSON.parse(savedAudio);
+        const currentHash = await createContentHash(content);
+        
+        if (hash === currentHash) {
+          setAudioUrl(url);
+        } else {
+          // Content has changed, cleanup old audio
+          URL.revokeObjectURL(url);
+          localStorage.removeItem(`audio_${id}`);
+        }
+      }
+    };
+
+    loadExistingAudio();
+  }, [content, id]);
+
+  // Cleanup audio when content changes or component unmounts
+  useEffect(() => {
+    return () => {
+      // Cleanup audio URL
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, [audioUrl]);
+
+  // Cleanup old audio when content changes
+  useEffect(() => {
+    const cleanupOldAudio = async () => {
+      if (!content) return;
+      
+      const savedAudio = localStorage.getItem(`audio_${id}`);
+      if (savedAudio) {
+        const { hash, url } = JSON.parse(savedAudio);
+        const currentHash = await createContentHash(content);
+        
+        if (hash !== currentHash) {
+          // Content has changed, cleanup old audio
+          URL.revokeObjectURL(url);
+          localStorage.removeItem(`audio_${id}`);
+          setAudioUrl(null);
+          if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current = null;
+          }
+        }
+      }
+    };
+
+    cleanupOldAudio();
+  }, [content, id]);
 
   const togglePlayback = () => {
     if (!audioUrl) {
@@ -444,15 +520,6 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
       setIsPlaying(true);
     }
   };
-
-  // Cleanup audio URL when component unmounts
-  useEffect(() => {
-    return () => {
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
-      }
-    };
-  }, [audioUrl]);
 
   // Function to generate quiz options
   const generateQuizOptions = (word: string) => {
@@ -756,7 +823,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
                 </Tooltip>
               </TooltipProvider>
             </div>
-            <div className="prose prose-sm max-w-360">
+            <div className="prose prose-sm max-w-none min-h-[200px] border rounded-md p-4 break-words whitespace-pre-wrap overflow-x-hidden max-w-100">
               <EditorContent editor={editor} />
             </div>
           </div>
@@ -775,7 +842,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
                   <div className="space-y-2">
                     <div className="h-px bg-border my-4" />
                     {isEditingAIResponse ? (
-                      <div className="space-y-4 ">
+                      <div className="space-y-4">
                         <div className="flex gap-2 p-2 border rounded-md">
                           <TooltipProvider>
                             <Tooltip>
@@ -945,9 +1012,11 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
             )}
           </>
         )}
-        <div className="mt-4 border-t pt-4">
-          <AIChatInput onResponse={handleAIResponse} disabled={isTyping} />
-        </div>
+        {!isEditing && (
+          <div className="sticky bottom-0 mt-4 border-t pt-4 bg-background">
+            <AIChatInput onResponse={handleAIResponse} disabled={isTyping} />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

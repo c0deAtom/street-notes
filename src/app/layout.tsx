@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Layout } from "@/components/Layout";
+import { Providers } from "./providers";
+import { Navbar } from "@/components/Navbar";
 import { Toaster } from "@/components/ui/toaster";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ReNotes - Your Personal Note-Taking App",
-  description: "Create, organize, and highlight your notes with ease.",
+  title: "ReNotes",
+  description: "Your AI-powered note-taking companion",
 };
 
 export default function RootLayout({
@@ -19,8 +20,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <Layout>{children}</Layout>
-        <Toaster />
+        <Providers>
+          <div className="min-h-screen flex flex-col">
+            <Navbar />
+            <main className="flex-1">
+              {children}
+            </main>
+          </div>
+          <Toaster />
+        </Providers>
       </body>
     </html>
   );

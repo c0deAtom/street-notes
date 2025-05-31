@@ -185,7 +185,7 @@ export default function NotesPage() {
         {openTabs.length > 0 ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
             <div className="border-b">
-              <TabsList className="w-full justify-start h-10 rounded-none border-b bg-transparent p-0">
+              <TabsList className="w-auto justify-start h-10 rounded-none border-b bg-transparent p-0">
                 {openTabs.map((tab) => (
                   <TabsTrigger
                     key={tab.id}

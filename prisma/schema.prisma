@@ -7,12 +7,28 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id             String    @id @default(cuid())
+  name           String?
+  email          String    @unique
+  emailVerified  DateTime?
+  image          String?
+  hashedPassword String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  notes          Note[]
+}
+
 model Note {
-  id      String   @id @default(uuid())
-  title   String
-  content String?
+  id        String   @id @default(cuid())
+  title     String
+  content   String?
+  position  Int
   createdAt DateTime @default(now())
-  tiles    Tile[]   // Relation to Tiles
+  updatedAt DateTime @updatedAt
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tiles     Tile[]   // Add this relation field
 }
 
 model Tile {
@@ -22,6 +38,6 @@ model Tile {
   highlights Json[] @default([])
   position  Int      // To maintain order of tiles
   createdAt DateTime @default(now())
-  note      Note     @relation(fields: [noteId], references: [id])
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
   noteId    String   // Foreign key to Note
 } 
