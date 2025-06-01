@@ -25,6 +25,7 @@ interface Note {
   tiles: Tile[];
   createdAt: Date;
   position: number;
+  highlightedWords: string[];
 }
 
 interface SidebarProps {
@@ -42,6 +43,7 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [isDeletingNotes, setIsDeletingNotes] = useState(false);
+  const [isBigView, setIsBigView] = useState(false);
 
   const handleExpand = (expanded: boolean) => {
     setIsExpanded(expanded);
@@ -85,7 +87,9 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
     }
   };
 
-  
+  const toggleViewMode = () => {
+    setIsBigView(!isBigView);
+  };
 
   return (
     <div 
@@ -112,6 +116,16 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                 <Plus className="h-4 w-4" />
               )}
             </Button>
+            {isExpanded && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={toggleViewMode}
+              className="h-8 w-8"
+            >
+              {isBigView ? 'L' : 'V'}
+                </Button>
+            )}
           </div>
         </div>
         <div className="flex-1 overflow-hidden">
@@ -126,15 +140,15 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                       : 'opacity-85 scale-98 hover:opacity-95 hover:scale-99'
                   }`}
                 >
-                  <Card
-                    className={`cursor-pointer transition-colors pt-9 flex items-left justify-center ${
+                  <div
+                    className={`cursor-pointer transition-colors  flex items-left justify-left rounded-md border-2 ${
                       selectedNote?.id === note.id && !isDeleteMode
                         ? 'bg-gray-200'
                         : 'hover:bg-gray-200'
                     } ${isDeleteMode && selectedNotes.includes(note.id) ? 'border-primary' : ''}`}
                     onClick={() => handleNoteSelect(note)}
                   >
-                    <CardHeader className="p-3">
+                    <div className="p-3">
                       <div className="flex items-center gap-2">
                         {isDeleteMode && (
                           <Checkbox
@@ -143,17 +157,21 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                             className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
                           />
                         )}
-                        <CardTitle className="text-sm font-medium truncate text-1xl">
+                        <div className="text-sm font-medium truncate text-1xl">
                           {isExpanded ? note.title : note.title.charAt(0)}
-                        </CardTitle>
+                        </div>
                       </div>
-                      {isExpanded && note.highlights && note.highlights.length > 0 && (
+                      {isExpanded && isBigView && (
                         <div className="mt-2 text-xs text-muted-foreground">
-                          {note.highlights.map(h => h.word).join(', ')}
+                          {note.tiles.map(tile => (
+                            <div key={tile.id} className="truncate">
+                              {tile.title}
+                            </div>
+                          ))}
                         </div>
                       )}
-                    </CardHeader>
-                  </Card>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

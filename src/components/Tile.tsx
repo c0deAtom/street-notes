@@ -1027,15 +1027,26 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
           <>
             {!isQuizMode && (
               <>
+              <div className="flex items-top justify-between">
                 <div 
                   ref={contentRef}
-                  className={`prose prose-sm max-w-none ${isFocused ? 'cursor-pointer' : 'cursor-default'} ${
+                  className={`prose prose-sm max-w-none  ${isFocused ? 'cursor-pointer' : 'cursor-default'} ${
                     !isFocused ? 'max-h-[200px] overflow-hidden' : ''
                   }`}
                   onClick={handleWordClick}
                   onDoubleClick={handleDoubleClick}
                   dangerouslySetInnerHTML={{ __html: processContent(content || '') }}
                 />
+                 {/* Display highlighted words on the right side */}
+                 <div className={`sticky top-0  mr-2  border rounded-md p-2 ${getTileColor(position)} shadow  w-40  ${isFocused ? 'max-h-[480px] overflow-y-auto' : 'max-h-[200px] overflow-y-auto'}` }>
+  <ul className="list-disc pl-4 space-y-1">
+    {highlightedWords.map((word, index) => (
+      <li key={index}>{word}</li>
+    ))}
+  </ul>
+        </div>
+        </div>
+        
                 {!isFocused && content && content.length > 500 && (
                   <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background to-transparent" />
                 )}
@@ -1161,6 +1172,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
                           variant="outline"
                           size="sm"
                           onClick={handleEditAIResponse}
+                          disabled={isTyping}
                         >
                           <Pencil className="h-4 w-4 mr-2" />
                           Edit Response
@@ -1170,6 +1182,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
                         variant="default"
                         size="sm"
                         onClick={handleSaveAIResponse}
+                        disabled={isTyping}
                       >
                         <Save className="h-4 w-4 mr-2" />
                         Save Response
@@ -1223,10 +1236,8 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
             <AIChatInput onResponse={handleAIResponse} disabled={isTyping} />
           </div>
         )}
-        {/* Display highlighted words on the right side */}
-        <div className="absolute right-0 top-0 mt-2 mr-2 text-xs text-muted-foreground">
-          {highlightedWords.join(', ')}
-        </div>
+       
+
       </CardContent>
     </Card>
   );
