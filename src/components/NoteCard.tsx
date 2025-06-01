@@ -1,19 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { Tile } from "./Tile";
-
-interface Tile {
-  id: string;
-  title: string;
-  content: string | null;
-  position: number;
-  noteId: string;
-  highlightedWords?: string[];
-}
+import { Tile as TileComponent } from "./Tile";
+import type { Note, Tile } from '@/types';
 
 interface NoteCardProps {
   noteId: string;
@@ -32,6 +24,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
   const [isAddingTile, setIsAddingTile] = useState(false);
   const [deletingTileId, setDeletingTileId] = useState<string | null>(null);
   const { toast } = useToast();
+  const tileRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
     // Only set tiles if initialTiles is not empty
@@ -39,6 +32,12 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
       setTiles(initialTiles.filter(tile => tile.noteId === noteId));
     }
   }, [initialTiles, noteId]);
+
+  useEffect(() => {
+    if (focusedTileId && tileRefs.current[focusedTileId]) {
+      tileRefs.current[focusedTileId]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [focusedTileId]);
 
   const handleTileFocus = (tileId: string) => {
     setFocusedTileId(tileId);
@@ -83,17 +82,6 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
     }
   };
 
-  const updateNoteHighlights = () => {
-    const allHighlightedWords = tiles.flatMap(tile => tile.highlightedWords || []);
-    const uniqueWords = Array.from(new Set(allHighlightedWords));
-    // Assuming there's a function to update the note's highlights
-    updateNoteHighlightsInDatabase(noteId, uniqueWords);
-  };
-
-  useEffect(() => {
-    updateNoteHighlights();
-  }, [tiles]);
-
   const updateTile = async (tileId: string, title: string, content: string) => {
     try {
       const response = await fetch('/api/tiles', {
@@ -110,7 +98,6 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
       setTiles(tiles.map((tile) =>
         tile.id === tileId ? updatedTile : tile
       ));
-      updateNoteHighlights();
       toast({
         title: 'Success',
         description: 'Tile updated successfully',
@@ -168,7 +155,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
         </Button>
       </div>
 
-      <div className="grid gap-4 pt-2 max-h-[calc(100vh-8rem)] overflow-y-auto pr-40 px-3">
+      <div className="grid gap-4 pt-2 max-h-[calc(100vh-8rem)] overflow-y-auto pr- px-3">
         <div className="pb-40 flex flex-col gap-8  ">
           {tiles.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[calc(100vh-16rem)] text-muted-foreground">
@@ -179,6 +166,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
             tiles.map((tile) => (
               <div
                 key={tile.id}
+                ref={el => { tileRefs.current[tile.id] = el; }}
                 onClick={() => handleTileFocus(tile.id)}
                 className={`transition-all duration-200 ${
                   focusedTileId === tile.id
@@ -186,7 +174,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
                     : 'opacity-85 scale-98 hover:opacity-95 hover:scale-99'
                 }`}
               >
-                <Tile
+                <TileComponent
                   id={tile.id}
                   title={tile.title}
                   content={tile.content}

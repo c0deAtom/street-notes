@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { assignUniqueIDsToMarks } from "@/lib/utils";
+import type { Tile } from '@/types';
 
 interface TileProps {
   id: string;
@@ -1099,8 +1100,8 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
                   onDoubleClick={handleDoubleClick}
                   dangerouslySetInnerHTML={{ __html: processContent(content || '') }}
                 />
-                 {/* Display highlighted words on the right side */}
-                 <div className={`absolute right-4 top-20  mr-2  border rounded-md p-2 ${getTileColor(position)} shadow  w-40  ${isFocused ? 'max-h-[400px] overflow-y-auto' : 'max-h-[200px] overflow-y-auto'}` }>
+                 {/* Display highlighted words on the right side, hidden on small screens */}
+                 <div className={`hidden md:block absolute right-4 top-20  mr-2  border rounded-md p-2 ${getTileColor(position)} shadow  w-40  ${isFocused ? 'max-h-[400px] overflow-y-auto' : 'max-h-[200px] overflow-y-auto'}` }>
   <ul className="list-disc pl-4 space-y-1">
     {highlightedWords.map((word, index) => (
       <li key={index}>

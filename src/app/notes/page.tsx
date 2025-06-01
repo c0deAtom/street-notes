@@ -7,35 +7,17 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Navbar } from '@/components/Navbar';
+import type { Note, Tile } from '@/types';
 
 interface Highlight {
   word: string;
-}
-
-interface Tile {
-  id: string;
-  title: string;
-  content: string | null;
-  position: number;
-  noteId: string;
-  highlights: any[];
-  createdAt: Date;
-}
-
-interface Note {
-  id: string;
-  title: string;
-  content: string | null;
-  highlights: Highlight[];
-  tiles: Tile[];
-  createdAt: Date;
-  position: number;
 }
 
 export default function NotesPage() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [openTabs, setOpenTabs] = useState<Note[]>([]);
   const [activeTab, setActiveTab] = useState<string | undefined>(undefined);
@@ -189,6 +171,7 @@ export default function NotesPage() {
         setActiveTab={setActiveTab}
         setSelectedNote={setSelectedNote}
         setOpenTabs={setOpenTabs}
+        onSidebarOpen={() => setIsSidebarOpen(prev => !prev)}
       />
       <div className="flex relative h-[calc(100vh-4rem)]">
         <Sidebar
@@ -198,8 +181,10 @@ export default function NotesPage() {
           onAddNote={createBlankNote}
           onExpand={setIsSidebarExpanded}
           onDeleteNotes={handleDeleteNotes}
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
         />
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
+        <div className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 ${isSidebarOpen ? 'ml-[120px] md:ml-0' : ''}` }>
           {openTabs.length > 0 ? (
             <Tabs
               value={activeTab}
@@ -210,7 +195,7 @@ export default function NotesPage() {
               }}
               className="flex-1"
             >
-              <div className="border-b">
+              <div className="border-b overflow-x-auto whitespace-nowrap scrollbar-hide">
                 <TabsList className="w-auto justify-start h-10 rounded-none border-b bg-transparent p-0">
                   {openTabs.map((tab) => (
                     <TabsTrigger
@@ -234,7 +219,7 @@ export default function NotesPage() {
               </div>
               {openTabs.map((tab) => (
                 <TabsContent key={tab.id} value={tab.id} className="flex-1 mt-[-0.4rem]">
-                  <div className="p-4 h-full overflow-auto">
+                  <div className=" h-full overflow-auto">
                     <NoteCard noteId={tab.id} initialTiles={tab.tiles || []} />
                   </div>
                 </TabsContent>

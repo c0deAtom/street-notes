@@ -18,25 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { useState, useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import ReactDOM from "react-dom";
-
-interface Tile {
-  id: string;
-  title: string;
-  content: string | null;
-  position: number;
-  noteId: string;
-  highlightedWords?: string[];
-}
-
-interface Note {
-  id: string;
-  title: string;
-  content: string | null;
-  highlights: { word: string }[];
-  tiles: Tile[];
-  createdAt: Date;
-  position: number;
-}
+import type { Note, Tile } from '@/types';
 
 interface NavbarProps {
   notes: Note[];
@@ -44,6 +26,7 @@ interface NavbarProps {
   setActiveTab: Dispatch<SetStateAction<string | undefined>>;
   setSelectedNote: Dispatch<SetStateAction<Note | null>>;
   setOpenTabs?: Dispatch<SetStateAction<Note[]>>;
+  onSidebarOpen?: () => void;
 }
 
 // Helper to get a snippet of 5-6 words around the search term
@@ -73,7 +56,7 @@ function getSnippet(content: string, search: string, wordsAround = 3) {
   return snippet;
 }
 
-export function Navbar({ notes, openTabs, setActiveTab, setSelectedNote, setOpenTabs }: NavbarProps) {
+export function Navbar({ notes, openTabs, setActiveTab, setSelectedNote, setOpenTabs, onSidebarOpen }: NavbarProps) {
   const { data: session } = useSession();
   const { toast } = useToast();
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -181,7 +164,16 @@ export function Navbar({ notes, openTabs, setActiveTab, setSelectedNote, setOpen
 
   return (
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-16 items-center px-4 container mx-4">
+      <div className="flex h-16 items-center  container mx-2">
+        {/* Mobile sidebar toggle button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden mr-2"
+          onClick={onSidebarOpen}
+        >
+          <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-menu h-6 w-6"><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="6" x2="20" y2="6" /><line x1="4" y1="18" x2="20" y2="18" /></svg>
+        </Button>
         <div className="flex items-center gap-4 flex-1">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
             ReNotes
