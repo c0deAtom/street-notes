@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Check, X, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Loader2, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
 interface Tile {
@@ -24,6 +24,7 @@ interface Note {
   highlights: { word: string }[];
   tiles: Tile[];
   createdAt: Date;
+  position: number;
 }
 
 interface SidebarProps {
@@ -40,6 +41,7 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [isAddingNote, setIsAddingNote] = useState(false);
+  const [isDeletingNotes, setIsDeletingNotes] = useState(false);
 
   const handleExpand = (expanded: boolean) => {
     setIsExpanded(expanded);
@@ -63,10 +65,15 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
     }
   };
 
-  const handleDeleteSelected = () => {
-    onDeleteNotes(selectedNotes);
-    setSelectedNotes([]);
-    setIsDeleteMode(false);
+  const handleDeleteSelected = async () => {
+    try {
+      setIsDeletingNotes(true);
+      await onDeleteNotes(selectedNotes);
+      setSelectedNotes([]);
+      setIsDeleteMode(false);
+    } finally {
+      setIsDeletingNotes(false);
+    }
   };
 
   const handleAddNote = async () => {
@@ -77,6 +84,8 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
       setIsAddingNote(false);
     }
   };
+
+  
 
   return (
     <div 
@@ -108,32 +117,44 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="p-2 space-y-2">
-             
               {notes.map((note) => (
-                <Card
+                <div
                   key={note.id}
-                  className={`cursor-pointer transition-colors h-10 pt-9  flex items-left justify-center ${
+                  className={`transition-all duration-200 ${
                     selectedNote?.id === note.id && !isDeleteMode
-                      ? 'bg-gray-200'
-                      : 'hover:bg-gray-200'
-                  } ${isDeleteMode && selectedNotes.includes(note.id) ? 'border-primary' : ''}`}
-                  onClick={() => handleNoteSelect(note)}
+                      ? 'opacity-100 scale-100'
+                      : 'opacity-85 scale-98 hover:opacity-95 hover:scale-99'
+                  }`}
                 >
-                  <CardHeader className="p-3">
-                    <div className="flex items-center gap-2">
-                      {isDeleteMode && (
-                        <Checkbox
-                          checked={selectedNotes.includes(note.id)}
-                          onCheckedChange={() => handleNoteSelect(note)}
-                          className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
-                        />
+                  <Card
+                    className={`cursor-pointer transition-colors pt-9 flex items-left justify-center ${
+                      selectedNote?.id === note.id && !isDeleteMode
+                        ? 'bg-gray-200'
+                        : 'hover:bg-gray-200'
+                    } ${isDeleteMode && selectedNotes.includes(note.id) ? 'border-primary' : ''}`}
+                    onClick={() => handleNoteSelect(note)}
+                  >
+                    <CardHeader className="p-3">
+                      <div className="flex items-center gap-2">
+                        {isDeleteMode && (
+                          <Checkbox
+                            checked={selectedNotes.includes(note.id)}
+                            onCheckedChange={() => handleNoteSelect(note)}
+                            className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                          />
+                        )}
+                        <CardTitle className="text-sm font-medium truncate text-1xl">
+                          {isExpanded ? note.title : note.title.charAt(0)}
+                        </CardTitle>
+                      </div>
+                      {isExpanded && note.highlights && note.highlights.length > 0 && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          {note.highlights.map(h => h.word).join(', ')}
+                        </div>
                       )}
-                      <CardTitle className="text-sm font-medium truncate text-1xl  ">
-                        {isExpanded ? note.title : note.title.charAt(0)}
-                      </CardTitle>
-                    </div>
-                  </CardHeader>
-                </Card>
+                    </CardHeader>
+                  </Card>
+                </div>
               ))}
             </div>
           </ScrollArea>
@@ -145,36 +166,46 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
               size="sm"
               className="w-full"
               onClick={handleDeleteSelected}
+              disabled={isDeletingNotes}
             >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Selected ({selectedNotes.length})
+              {isDeletingNotes ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Selected ({selectedNotes.length})
+                </>
+              )}
             </Button>
           </div>
         )}
-         {isExpanded && (
-                <div className="flex justify-between items-center mb-2 px-2">
-                  <Button
-                    variant={isDeleteMode ? "destructive" : "outline"}
-                    size="sm"
-                    onClick={toggleDeleteMode}
-                    className="w-full"
-                  >
-                    {isDeleteMode ? (
-                      <>
-                        <X className="h-4 w-4 mr-2" />
-                        Cancel
-                      </>
-                    ) : (
-                      <>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete Notes
-                      </>
-                    )}
-                  </Button>
-                </div>
+        {isExpanded && (
+          <div className="flex justify-between items-center mb-2 px-2">
+            <Button
+              variant={isDeleteMode ? "destructive" : "outline"}
+              size="sm"
+              onClick={toggleDeleteMode}
+              className="w-full"
+              disabled={isDeletingNotes}
+            >
+              {isDeleteMode ? (
+                <>
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Notes
+                </>
               )}
+            </Button>
+          </div>
+        )}
       </div>
-      
     </div>
   );
 } 

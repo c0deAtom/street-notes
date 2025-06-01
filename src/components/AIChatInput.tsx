@@ -53,7 +53,7 @@ export function AIChatInput({ onResponse, disabled = false }: AIChatInputProps) 
   };
 
   return (
-    <form onSubmit={handleSubmit} className="relative">
+    <form onSubmit={handleSubmit} className="text-black relative">
       <div className="relative">
         <Textarea
           ref={textareaRef}

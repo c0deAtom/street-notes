@@ -28,6 +28,7 @@ interface Note {
   highlights: Highlight[];
   tiles: Tile[];
   createdAt: Date;
+  position: number;
 }
 
 export default function NotesPage() {
@@ -102,17 +103,25 @@ export default function NotesPage() {
       const nextNumber = numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
       const newTitle = `Untitled_${nextNumber}`;
 
+      // Get the lowest position
+      const firstNote = notes[0];
+      const newPosition = firstNote ? firstNote.position - 1 : 0;
+
       const response = await fetch('/api/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTitle, content: '' }),
+        body: JSON.stringify({ 
+          title: newTitle, 
+          content: '',
+          position: newPosition 
+        }),
       });
       const newNote = await response.json();
       setNotes(prevNotes => [newNote, ...prevNotes]);
       setSelectedNote(newNote);
       
       // Add to open tabs
-      setOpenTabs(prevTabs => [...prevTabs, newNote]);
+      setOpenTabs(prevTabs => [newNote, ...prevTabs]);
       setActiveTab(newNote.id);
     } finally {
       setIsCreatingNote(false);

@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Pencil, Trash2, Bold, Italic, Heading1, Heading2, List, ListOrdered, Save, Volume2, VolumeX, Loader2, Eye, EyeOff } from "lucide-react";
+import { Pencil, Trash2, Bold, Italic, Heading1, Heading2, List, ListOrdered, Save, Volume2, VolumeX, Loader2, Eye, EyeOff, AlertCircle, Brain, X } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -32,9 +32,11 @@ interface TileProps {
   position: number;
   onUpdate: (id: string, title: string, content: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  isFocused: boolean;
+  isDeleting?: boolean;
 }
 
-export function Tile({ id, title, content, position, onUpdate, onDelete }: TileProps) {
+export function Tile({ id, title, content, position, onUpdate, onDelete, isFocused, isDeleting = false }: TileProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
   const [isTyping, setIsTyping] = useState(false);
@@ -56,6 +58,8 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
     selectedIndex: number | null;
   } | null>(null);
   const [revealedWords, setRevealedWords] = useState<Set<string>>(new Set());
+  const [isAudioError, setIsAudioError] = useState(false);
+  const [highlightedWords, setHighlightedWords] = useState<string[]>([]);
 
   const editor = useEditor({
     extensions: [
@@ -382,24 +386,62 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
     setIsEditingAIResponse(false);
   };
 
+  const handleAudioError = async () => {
+    try {
+      // Clear all audio data
+      await audioStorage.clearAll();
+      // Reset audio state
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+        setAudioUrl(null);
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+        audioRef.current = null;
+      }
+      setIsAudioError(false);
+      toast({
+        title: "Audio storage reset",
+        description: "Audio storage has been reset. Please try again.",
+      });
+    } catch (error) {
+      console.error('Error resetting audio storage:', error);
+      toast({
+        title: "Error",
+        description: "Failed to reset audio storage. Please refresh the page.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const generateAudio = async () => {
     if (!content) return;
     
     try {
       setIsGeneratingAudio(true);
+      setIsAudioError(false);
       
       // Create a content hash to check for existing audio
       const contentHash = await createContentHash(content);
       
-      // Check localStorage for existing audio
-      const savedAudio = localStorage.getItem(`audio_${id}`);
-      if (savedAudio) {
-        const { hash, url } = JSON.parse(savedAudio);
-        if (hash === contentHash) {
-          setAudioUrl(url);
-          setIsGeneratingAudio(false);
-          return;
+      // Check IndexedDB for existing audio
+      const audioBlob = await audioStorage.getAudio({
+        noteId: id,
+        contentHash,
+        timestamp: Date.now(),
+        title
+      });
+
+      if (audioBlob) {
+        // Cleanup old audio URL if it exists
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
         }
+        const url = URL.createObjectURL(audioBlob);
+        setAudioUrl(url);
+        setIsGeneratingAudio(false);
+        return;
       }
 
       // Generate new audio only if content has changed
@@ -415,17 +457,26 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate audio');
+        const error = await response.json().catch(() => ({ detail: 'Failed to generate audio' }));
+        throw new Error(error.detail || 'Failed to generate audio');
       }
 
-      const audioBlob = await response.blob();
-      const url = URL.createObjectURL(audioBlob);
+      const newAudioBlob = await response.blob();
       
-      // Save to localStorage with content hash
-      localStorage.setItem(`audio_${id}`, JSON.stringify({
-        hash: contentHash,
-        url: url
-      }));
+      // Cleanup old audio URL if it exists
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+      
+      const url = URL.createObjectURL(newAudioBlob);
+      
+      // Save to IndexedDB
+      await audioStorage.saveAudio({
+        noteId: id,
+        contentHash,
+        timestamp: Date.now(),
+        title
+      }, newAudioBlob);
 
       setAudioUrl(url);
       
@@ -435,11 +486,36 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
       });
     } catch (error) {
       console.error('Error generating audio:', error);
-      toast({
-        title: "Error",
-        description: "Failed to generate audio",
-        variant: "destructive",
-      });
+      // Check if it's a database error
+      if (error instanceof Error && error.message.includes('index')) {
+        setIsAudioError(true);
+        toast({
+          title: "Database Error",
+          description: "There was an error with the audio storage. Click to reset.",
+          action: (
+            <Button variant="outline" size="sm" onClick={handleAudioError}>
+              Reset Storage
+            </Button>
+          ),
+          variant: "destructive",
+        });
+      } else {
+        // Cleanup on error
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          setAudioUrl(null);
+        }
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.src = '';
+          audioRef.current = null;
+        }
+        toast({
+          title: "Error",
+          description: error instanceof Error ? error.message : "Failed to generate audio",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsGeneratingAudio(false);
     }
@@ -447,18 +523,24 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
 
   // Helper function to create a content hash
   const createContentHash = async (content: string) => {
-    // Create a temporary div to parse HTML
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = content;
-    
-    // Get only the text content, ignoring HTML tags
-    const textContent = tempDiv.textContent || '';
-    
-    const encoder = new TextEncoder();
-    const data = encoder.encode(textContent);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    try {
+      // Create a temporary div to parse HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = content;
+      
+      // Get only the text content, ignoring HTML tags
+      const textContent = tempDiv.textContent || '';
+      
+      const encoder = new TextEncoder();
+      const data = encoder.encode(textContent);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (error) {
+      console.error('Error creating content hash:', error);
+      // Return a timestamp-based hash as fallback
+      return Date.now().toString(36);
+    }
   };
 
   // Load existing audio when component mounts
@@ -466,34 +548,93 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
     const loadExistingAudio = async () => {
       if (!content) return;
       
-      const savedAudio = localStorage.getItem(`audio_${id}`);
-      if (savedAudio) {
-        const { hash, url } = JSON.parse(savedAudio);
-        const currentHash = await createContentHash(content);
-        
-        if (hash === currentHash) {
-          setAudioUrl(url);
-        } else {
-          // Content has changed, cleanup old audio
-          URL.revokeObjectURL(url);
-          localStorage.removeItem(`audio_${id}`);
-        }
+      const contentHash = await createContentHash(content);
+      const audioBlob = await audioStorage.getAudio({
+        noteId: id,
+        contentHash,
+        timestamp: Date.now(),
+        title
+      });
+      
+      if (audioBlob) {
+        const url = URL.createObjectURL(audioBlob);
+        setAudioUrl(url);
       }
     };
 
     loadExistingAudio();
-  }, [content, id]);
+  }, [content, id, title]);
+
+  const togglePlayback = () => {
+    if (!audioUrl) {
+      generateAudio();
+      return;
+    }
+
+    try {
+      if (!audioRef.current) {
+        audioRef.current = new Audio(audioUrl);
+        audioRef.current.onended = () => {
+          setIsPlaying(false);
+          if (audioRef.current) {
+            audioRef.current.currentTime = 0;
+          }
+        };
+        audioRef.current.onerror = (error) => {
+          console.error('Audio playback error:', error);
+          setIsPlaying(false);
+          setAudioUrl(null);
+          toast({
+            title: "Error",
+            description: "Failed to play audio. Please try generating it again.",
+            variant: "destructive",
+          });
+        };
+      }
+
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        audioRef.current.play().catch((error) => {
+          console.error('Error playing audio:', error);
+          setIsPlaying(false);
+          setAudioUrl(null);
+          toast({
+            title: "Error",
+            description: "Failed to play audio. Please try generating it again.",
+            variant: "destructive",
+          });
+        });
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error('Error in togglePlayback:', error);
+      setIsPlaying(false);
+      setAudioUrl(null);
+      toast({
+        title: "Error",
+        description: "Failed to play audio. Please try generating it again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Cleanup audio when content changes or component unmounts
   useEffect(() => {
     return () => {
-      // Cleanup audio URL
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
-      }
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
+      try {
+        // Cleanup audio URL
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+        }
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.src = '';
+          audioRef.current = null;
+        }
+      } catch (error) {
+        console.error('Error cleaning up audio:', error);
       }
     };
   }, [audioUrl]);
@@ -503,46 +644,44 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
     const cleanupOldAudio = async () => {
       if (!content) return;
       
-      const savedAudio = localStorage.getItem(`audio_${id}`);
-      if (savedAudio) {
-        const { hash, url } = JSON.parse(savedAudio);
-        const currentHash = await createContentHash(content);
+      try {
+        const contentHash = await createContentHash(content);
+        const audioBlob = await audioStorage.getAudio({
+          noteId: id,
+          contentHash,
+          timestamp: Date.now(),
+          title
+        });
         
-        if (hash !== currentHash) {
+        if (!audioBlob) {
           // Content has changed, cleanup old audio
-          URL.revokeObjectURL(url);
-          localStorage.removeItem(`audio_${id}`);
-          setAudioUrl(null);
+          if (audioUrl) {
+            URL.revokeObjectURL(audioUrl);
+            setAudioUrl(null);
+          }
           if (audioRef.current) {
             audioRef.current.pause();
+            audioRef.current.src = '';
             audioRef.current = null;
           }
+        }
+      } catch (error) {
+        console.error('Error cleaning up old audio:', error);
+        // Reset audio state on error
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          setAudioUrl(null);
+        }
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.src = '';
+          audioRef.current = null;
         }
       }
     };
 
     cleanupOldAudio();
-  }, [content, id]);
-
-  const togglePlayback = () => {
-    if (!audioUrl) {
-      generateAudio();
-      return;
-    }
-
-    if (!audioRef.current) {
-      audioRef.current = new Audio(audioUrl);
-      audioRef.current.onended = () => setIsPlaying(false);
-    }
-
-    if (isPlaying) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      audioRef.current.play();
-      setIsPlaying(true);
-    }
-  };
+  }, [content, id, title]);
 
   // Function to generate quiz options
   const generateQuizOptions = (word: string) => {
@@ -658,110 +797,113 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
 
   const getTileColor = (position: number) => {
     const colors = [
-      
       'bg-green-50',
       'bg-yellow-50',
       'bg-blue-50',
       'bg-pink-50',
       'bg-purple-50'
     ];
-    return colors[position % colors.length];
+    // Use modulo to cycle through colors
+    return colors[Math.abs(position) % colors.length];
   };
 
+  const updateHighlightedWords = () => {
+    const contentHTML = contentRef.current?.innerHTML || '';
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(contentHTML, 'text/html');
+    const marks = doc.querySelectorAll('mark');
+    const words = Array.from(marks).map(mark => mark.textContent || '').filter(Boolean);
+    setHighlightedWords(words);
+  };
+
+  useEffect(() => {
+    updateHighlightedWords();
+  }, [content]);
+
+  // Update highlighted words when content changes
+  useEffect(() => {
+    if (isEditing) {
+      updateHighlightedWords();
+    }
+  }, [isEditing, content]);
+
   return (
-    <Card className={`max-h-[700px] ${getTileColor(position)}`}>
-      <CardHeader className="flex flex-row items-center justify-between">
-        {isEditing ? (
-          <Input
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-            className="flex-1 mr-2"
-          />
-        ) : (
-          <CardTitle>{title}</CardTitle>
-        )}
-        <div className="flex gap-2">
+    <Card className={`relative max-h-[700px] ${getTileColor(position)} ${isFocused ? 'ring-1 ring-primary ring-offset-1' : ''}`}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">
           {isEditing ? (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSave}
-              >
-                Save
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCancel}
-              >
-                Cancel
-              </Button>
-            </>
+            <Input
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onBlur={handleSave}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              className="h-7"
+            />
           ) : (
+            <div
+              className="cursor-pointer"
+              onDoubleClick={() => setIsEditing(true)}
+            >
+              {title}
+            </div>
+          )}
+        </CardTitle>
+        <div className="flex items-center gap-2">
+          {isFocused && (
             <>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={togglePlayback}
-                      disabled={isGeneratingAudio}
-                    >
-                      {isGeneratingAudio ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : isPlaying ? (
-                        <VolumeX className="h-4 w-4" />
-                      ) : (
-                        <Volume2 className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {isGeneratingAudio ? "Generating audio..." : isPlaying ? "Stop playback" : "Play audio"}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsQuizMode(!isQuizMode)}
-                    >
-                      {isQuizMode ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {isQuizMode ? "Exit Quiz Mode" : "Enter Quiz Mode"}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
               <Button
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={togglePlayback}
+                disabled={isGeneratingAudio || isDeleting}
+              >
+                {isGeneratingAudio ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Volume2 className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setIsQuizMode(!isQuizMode)}
+                disabled={isDeleting}
+              >
+                {isQuizMode ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
                 onClick={handleEditClick}
+                disabled={isDeleting}
               >
                 <Pencil className="h-4 w-4" />
               </Button>
               <Button
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
                 onClick={() => onDelete(id)}
+                disabled={isDeleting}
               >
-                <Trash2 className="h-4 w-4" />
+                {isDeleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
               </Button>
             </>
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 overflow-y-auto">
+      <CardContent className={`space-y-4 ${isFocused ? 'overflow-y-auto' : 'overflow-hidden'}`}>
         {isEditing ? (
           <div className="space-y-4">
             <div className="flex gap-2 p-2 border rounded-md">
@@ -857,6 +999,25 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
                   <TooltipContent>Highlight</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              <div className="h-4 w-px bg-border mx-2" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancel}
+                className="h-8"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Cancel
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleSave}
+                className="h-8"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Save
+              </Button>
             </div>
             <div className="prose prose-sm max-w-none min-h-[200px] border rounded-md p-4 break-words whitespace-pre-wrap overflow-x-hidden max-w-100">
               <EditorContent editor={editor} />
@@ -868,11 +1029,16 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
               <>
                 <div 
                   ref={contentRef}
-                  className="prose prose-sm max-w-none cursor-pointer"
+                  className={`prose prose-sm max-w-none ${isFocused ? 'cursor-pointer' : 'cursor-default'} ${
+                    !isFocused ? 'max-h-[200px] overflow-hidden' : ''
+                  }`}
                   onClick={handleWordClick}
                   onDoubleClick={handleDoubleClick}
                   dangerouslySetInnerHTML={{ __html: processContent(content || '') }}
                 />
+                {!isFocused && content && content.length > 500 && (
+                  <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background to-transparent" />
+                )}
                 {showPreview && (
                   <div className="space-y-2">
                     <div className="h-px bg-border my-4" />
@@ -1017,11 +1183,16 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
               <>
                 <div 
                   ref={contentRef}
-                  className="prose prose-sm max-w-none cursor-pointer"
+                  className={`prose prose-sm max-w-none ${isFocused ? 'cursor-pointer' : 'cursor-default'} ${
+                    !isFocused ? 'max-h-[200px] overflow-hidden' : ''
+                  }`}
                   onClick={handleWordClick}
                   onDoubleClick={handleDoubleClick}
                   dangerouslySetInnerHTML={{ __html: processQuizContent(processContent(content || '')) }}
                 />
+                {!isFocused && content && content.length > 500 && (
+                  <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background to-transparent" />
+                )}
                 <Dialog open={!!quizOptions} onOpenChange={() => setQuizOptions(null)}>
                   <DialogContent>
                     <DialogHeader>
@@ -1047,11 +1218,15 @@ export function Tile({ id, title, content, position, onUpdate, onDelete }: TileP
             )}
           </>
         )}
-        {!isEditing && (
-        
+        {!isEditing && isFocused && (
+          <div className="sticky bottom-0 bg-background p-3">
             <AIChatInput onResponse={handleAIResponse} disabled={isTyping} />
-       
+          </div>
         )}
+        {/* Display highlighted words on the right side */}
+        <div className="absolute right-0 top-0 mt-2 mr-2 text-xs text-muted-foreground">
+          {highlightedWords.join(', ')}
+        </div>
       </CardContent>
     </Card>
   );
