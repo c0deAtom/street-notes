@@ -145,7 +145,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
 
   return (
     <div className="relative min-h-[calc(100vh-10rem)] ">
-      <div className="absolute top-0 right-0 z-10">
+      <div className="absolute top-3 right-3 z-10">
         <Button 
           size="icon" 
           className="rounded-full h-12 w-12 shadow-lg"
@@ -162,8 +162,9 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
               <p className="text-lg mb-4">No tiles yet</p>
               <p className="text-sm">Click the + button to add your first tile</p>
             </div>
-          ) : (
-            tiles.map((tile) => (
+          ) : (<div>
+            <div className="h-12"></div>
+            {tiles.map((tile) => (
               <div
                 key={tile.id}
                 ref={el => { tileRefs.current[tile.id] = el; }}
@@ -185,7 +186,8 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
                   isDeleting={deletingTileId === tile.id}
                 />
               </div>
-            ))
+            ))}
+            </div>
           )}
         </div>
       </div>
