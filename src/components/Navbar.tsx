@@ -15,13 +15,144 @@ import { LogOut, User, Settings, Search, Bell, Sun, Moon } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import type { Dispatch, SetStateAction } from "react";
+import ReactDOM from "react-dom";
 
-export function Navbar() {
+interface Tile {
+  id: string;
+  title: string;
+  content: string | null;
+  position: number;
+  noteId: string;
+  highlightedWords?: string[];
+}
+
+interface Note {
+  id: string;
+  title: string;
+  content: string | null;
+  highlights: { word: string }[];
+  tiles: Tile[];
+  createdAt: Date;
+  position: number;
+}
+
+interface NavbarProps {
+  notes: Note[];
+  openTabs: Note[];
+  setActiveTab: Dispatch<SetStateAction<string | undefined>>;
+  setSelectedNote: Dispatch<SetStateAction<Note | null>>;
+  setOpenTabs?: Dispatch<SetStateAction<Note[]>>;
+}
+
+// Helper to get a snippet of 5-6 words around the search term
+function getSnippet(content: string, search: string, wordsAround = 3) {
+  if (!content || !search) return '';
+  const text = content.replace(/<[^>]+>/g, ' '); // strip HTML
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(search.toLowerCase());
+  if (idx === -1) return text.split(/\s+/).slice(0, 6).join(' ');
+  // Find the word index
+  const words = text.split(/\s+/);
+  let charCount = 0;
+  let matchWordIdx = 0;
+  for (let i = 0; i < words.length; i++) {
+    charCount += words[i].length + 1;
+    if (charCount > idx) {
+      matchWordIdx = i;
+      break;
+    }
+  }
+  const start = Math.max(0, matchWordIdx - wordsAround);
+  const end = Math.min(words.length, matchWordIdx + wordsAround + 1);
+  let snippet = words.slice(start, end).join(' ');
+  // Highlight the search term
+  const re = new RegExp(`(${search})`, 'ig');
+  snippet = snippet.replace(re, '<mark class="bg-yellow-200">$1</mark>');
+  return snippet;
+}
+
+export function Navbar({ notes, openTabs, setActiveTab, setSelectedNote, setOpenTabs }: NavbarProps) {
   const { data: session } = useSession();
   const { toast } = useToast();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(3); // Example notification count
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState<{
+    noteId: string;
+    noteTitle: string;
+    tileId: string;
+    tileTitle: string;
+    tileContent: string | null;
+  }[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const inputRef = useRef<HTMLDivElement | null>(null);
+  const inputBoxRef = useRef<HTMLInputElement | null>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  useEffect(() => {
+    if (!searchTerm) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    const results: {
+      noteId: string;
+      noteTitle: string;
+      tileId: string;
+      tileTitle: string;
+      tileContent: string | null;
+    }[] = [];
+    for (const note of notes) {
+      for (const tile of note.tiles) {
+        if (
+          (tile.content && tile.content.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (tile.title && tile.title.toLowerCase().includes(searchTerm.toLowerCase()))
+        ) {
+          results.push({
+            noteId: note.id,
+            noteTitle: note.title,
+            tileId: tile.id,
+            tileTitle: tile.title,
+            tileContent: tile.content,
+          });
+        }
+      }
+    }
+    setSearchResults(results);
+    setShowDropdown(results.length > 0);
+  }, [searchTerm, notes]);
+
+  // Position dropdown absolutely over all content
+  useEffect(() => {
+    if (showDropdown && inputBoxRef.current) {
+      const rect = inputBoxRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        position: 'fixed',
+        left: rect.left,
+        top: rect.bottom + 4,
+        width: rect.width,
+        zIndex: 9999,
+        maxWidth: 480,
+        minWidth: 300,
+      });
+    }
+  }, [showDropdown]);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (inputRef.current && e.target instanceof Node && !inputRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    }
+    if (showDropdown) {
+      document.addEventListener("mousedown", handleClick);
+    }
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showDropdown]);
 
   const handleSignOut = async () => {
     try {
@@ -55,12 +186,55 @@ export function Navbar() {
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
             ReNotes
           </h1>
-          <div className="relative w-full max-w-sm">
+          <div className="relative w-full max-w-sm" ref={inputRef}>
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search notes..."
               className="pl-8 bg-muted/50"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              onFocus={() => setShowDropdown(searchResults.length > 0)}
+              ref={inputBoxRef}
             />
+            {showDropdown && typeof window !== 'undefined' && ReactDOM.createPortal(
+              <>
+                <div className="fixed inset-0 z-[9998] bg-black/10" onClick={() => setShowDropdown(false)} />
+                <div
+                  className="bg-background border border-border rounded-lg shadow-xl z-[9999] max-h-80 overflow-y-auto max-w-xl w-full min-w-[300px] p-1"
+                  style={dropdownStyle}
+                >
+                  {searchResults.length === 0 ? (
+                    <div className="p-3 text-center text-muted-foreground text-sm">No matching tiles found.</div>
+                  ) : (
+                    searchResults.map(result => (
+                      <div
+                        key={result.tileId}
+                        className="p-2 hover:bg-muted cursor-pointer border-b last:border-b-0 rounded transition-colors"
+                        onClick={() => {
+                          const note = notes.find(n => n.id === result.noteId) || null;
+                          if (note) {
+                            // If not already open, add to openTabs
+                            if (setOpenTabs && !openTabs.find(tab => tab.id === note.id)) {
+                              setOpenTabs(prev => [...prev, note]);
+                            }
+                            setActiveTab(note.id);
+                            setSelectedNote(note);
+                          }
+                          setSearchTerm("");
+                          setShowDropdown(false);
+                        }}
+                      >
+                        <div className="font-semibold text-sm truncate">{result.tileTitle}</div>
+                        {result.tileContent && searchTerm && (
+                          <div className="text-xs truncate text-muted-foreground" dangerouslySetInnerHTML={{ __html: getSnippet(result.tileContent, searchTerm, 3) }} />
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>,
+              document.body
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

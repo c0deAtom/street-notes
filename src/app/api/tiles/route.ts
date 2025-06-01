@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { assignUniqueIDsToMarks } from "@/lib/utils";
 
 export async function GET() {
   const tiles = await prisma.tile.findMany({
@@ -12,10 +13,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const { title, content, position, noteId } = await request.json();
+  const processedContent = assignUniqueIDsToMarks(content);
   const tile = await prisma.tile.create({
     data: { 
       title, 
-      content, 
+      content: processedContent,
       position,
       noteId 
     }
@@ -33,9 +35,10 @@ export async function DELETE(request: Request) {
 
 export async function PATCH(request: Request) {
   const { id, title, content, position } = await request.json();
+  const processedContent = assignUniqueIDsToMarks(content);
   const tile = await prisma.tile.update({
     where: { id },
-    data: { title, content, position },
+    data: { title, content: processedContent, position },
   });
   return NextResponse.json(tile);
 } 

@@ -106,8 +106,9 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
 
       if (!response.ok) throw new Error('Failed to update tile');
 
-      setTiles(tiles.map((tile) => 
-        tile.id === tileId ? { ...tile, title, content } : tile
+      const updatedTile = await response.json();
+      setTiles(tiles.map((tile) =>
+        tile.id === tileId ? updatedTile : tile
       ));
       updateNoteHighlights();
       toast({
@@ -167,7 +168,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
         </Button>
       </div>
 
-      <div className="grid gap-4 pt-2 max-h-[calc(100vh-8rem)] overflow-y-auto pr-4 px-3">
+      <div className="grid gap-4 pt-2 max-h-[calc(100vh-8rem)] overflow-y-auto pr-40 px-3">
         <div className="pb-40 flex flex-col gap-8  ">
           {tiles.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[calc(100vh-16rem)] text-muted-foreground">

@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Pencil, Trash2, Bold, Italic, Heading1, Heading2, List, ListOrdered, Save, Volume2, VolumeX, Loader2, Eye, EyeOff, AlertCircle, Brain, X } from "lucide-react";
+import { Pencil, Trash2, Bold, Italic, Heading1, Heading2, List, ListOrdered, Save, Volume2, VolumeX, Loader2, Eye, EyeOff, AlertCircle, Brain, X, BotMessageSquare } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { assignUniqueIDsToMarks } from "@/lib/utils";
 
 interface TileProps {
   id: string;
@@ -117,6 +118,13 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
       const content = editor?.getHTML() || '';
       await onUpdate(id, editTitle, content);
       setIsEditing(false);
+      if (editor) {
+        const processedContent = processContent(content);
+        editor.commands.setContent(processedContent);
+      }
+      if (contentRef.current) {
+        contentRef.current.innerHTML = processContent(content);
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -130,6 +138,9 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
     setEditTitle(title);
     editor?.commands.setContent(content || '');
     setIsEditing(false);
+    if (contentRef.current) {
+      contentRef.current.innerHTML = processContent(content || '');
+    }
   };
 
   const toggleHighlight = useCallback(() => {
@@ -155,6 +166,19 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
     // Don't clear the selection, let it remain selected
   };
 
+  // Assigns unique IDs to <mark> tags based on their current order in the HTML
+  function reassignMarkIDs(html: string): string {
+    if (!html) return html;
+    // Use DOMParser to parse and reassign IDs
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const marks = doc.querySelectorAll('mark');
+    marks.forEach((mark, idx) => {
+      mark.id = `highlight-${idx}`;
+    });
+    return doc.body.innerHTML;
+  }
+
   const handleDoubleClick = async (event: React.MouseEvent<HTMLDivElement>) => {
     if (isQuizMode || isEditing) return;
 
@@ -168,7 +192,8 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
       target.parentNode?.replaceChild(textNode, target);
 
       // Get the updated HTML content
-      const updatedContent = assignUniqueIDs(contentRef.current?.innerHTML || '');
+      let updatedContent = contentRef.current?.innerHTML || '';
+      updatedContent = reassignMarkIDs(updatedContent);
       
       // Update editor content immediately for instant feedback
       editor?.commands.setContent(updatedContent);
@@ -186,7 +211,9 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
         textNode.parentNode?.replaceChild(mark, textNode);
         mark.appendChild(document.createTextNode(text));
         
-        editor?.commands.setContent(assignUniqueIDs(contentRef.current?.innerHTML || ''));
+        let revertedContent = contentRef.current?.innerHTML || '';
+        revertedContent = reassignMarkIDs(revertedContent);
+        editor?.commands.setContent(revertedContent);
         
         toast({
           title: "Error",
@@ -206,11 +233,12 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
 
       // Create a temporary span to highlight the selected text
       const span = document.createElement('mark');
-      span.className = 'bg-yellow-200';
+      span.className = 'bg-yellow-300';
       range.surroundContents(span);
 
       // Get the updated HTML content
-      const updatedContent = assignUniqueIDs(contentRef.current?.innerHTML || '');
+      let updatedContent = contentRef.current?.innerHTML || '';
+      updatedContent = reassignMarkIDs(updatedContent);
       
       // Update editor content immediately for instant feedback
       editor?.commands.setContent(updatedContent);
@@ -226,7 +254,9 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
         const textNode = document.createTextNode(selectedText);
         span.parentNode?.replaceChild(textNode, span);
         
-        editor?.commands.setContent(assignUniqueIDs(contentRef.current?.innerHTML || ''));
+        let revertedContent = contentRef.current?.innerHTML || '';
+        revertedContent = reassignMarkIDs(revertedContent);
+        editor?.commands.setContent(revertedContent);
         
         toast({
           title: "Error",
@@ -235,17 +265,6 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
         });
       }
     }
-  };
-
-  // Function to assign unique IDs to highlighted words
-  const assignUniqueIDs = (html: string) => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const highlightedSpans = doc.querySelectorAll('mark.bg-yellow-200');
-    highlightedSpans.forEach((span, index) => {
-      span.id = `highlight-${index}`; // Assign unique ID
-    });
-    return doc.body.innerHTML;
   };
 
   // Update processContent function to use assignUniqueIDs
@@ -1073,7 +1092,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
               <div className="flex items-top justify-between">
                 <div 
                   ref={contentRef}
-                  className={`prose prose-sm max-w-none  ${isFocused ? 'cursor-pointer' : 'cursor-default'} ${
+                  className={`prose prose-sm max-w-280  ${isFocused ? 'cursor-pointer' : 'cursor-default'} ${
                     !isFocused ? 'max-h-[200px] overflow-hidden' : ''
                   }`}
                   onClick={handleWordClick}
@@ -1291,7 +1310,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
                 onClick={toggleAIInput}
                 className="rounded-full h-12 w-12 shadow-lg"
               >
-                <Brain className="h-6 w-6" />
+             <BotMessageSquare className="h-6 w-6" />
               </Button>
             </div>
             {isAIInputExpanded && (

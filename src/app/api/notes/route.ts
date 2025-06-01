@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { User, Note, Tile } from '@prisma/client'
+import { assignUniqueIDsToMarks } from '@/lib/utils';
 
 export async function GET(request: Request) {
   try {
@@ -36,7 +37,16 @@ export async function GET(request: Request) {
       return new NextResponse("User not found", { status: 404 });
     }
 
-    return NextResponse.json(user.notes);
+    // Add unique IDs to <mark> tags in each tile.content before returning
+    const notesWithProcessedTiles = user.notes.map(note => ({
+      ...note,
+      tiles: note.tiles.map(tile => ({
+        ...tile,
+        content: tile.content ? assignUniqueIDsToMarks(tile.content) : tile.content
+      }))
+    }));
+
+    return NextResponse.json(notesWithProcessedTiles);
   } catch (error) {
     console.error("[NOTES_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });

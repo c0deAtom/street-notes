@@ -6,6 +6,7 @@ import { NoteCard } from '@/components/NoteCard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { Navbar } from '@/components/Navbar';
 
 interface Highlight {
   word: string;
@@ -181,54 +182,71 @@ export default function NotesPage() {
   };
 
   return (
-    <div className="flex relative h-[calc(100vh-4rem)]">
-      <Sidebar
+    <>
+      <Navbar
         notes={notes}
-        selectedNote={selectedNote}
-        onNoteSelect={handleNoteSelect}
-        onAddNote={createBlankNote}
-        onExpand={setIsSidebarExpanded}
-        onDeleteNotes={handleDeleteNotes}
+        openTabs={openTabs}
+        setActiveTab={setActiveTab}
+        setSelectedNote={setSelectedNote}
+        setOpenTabs={setOpenTabs}
       />
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {openTabs.length > 0 ? (
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
-            <div className="border-b">
-              <TabsList className="w-auto justify-start h-10 rounded-none border-b bg-transparent p-0">
-                {openTabs.map((tab) => (
-                  <TabsTrigger
-                    key={tab.id}
-                    value={tab.id}
-                    className="relative h-10 px-4 rounded-none border-r data-[state=active]:bg-gray-200 data-[state=active]:shadow-none"
-                  >
-                    {tab.title}
-                    <div
-                      className="ml-2 hover:bg-muted rounded-sm p-1 cursor-pointer inline-flex items-center justify-center"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeTab(tab.id);
-                      }}
+      <div className="flex relative h-[calc(100vh-4rem)]">
+        <Sidebar
+          notes={notes}
+          selectedNote={selectedNote}
+          onNoteSelect={handleNoteSelect}
+          onAddNote={createBlankNote}
+          onExpand={setIsSidebarExpanded}
+          onDeleteNotes={handleDeleteNotes}
+        />
+        <div className="flex-1 flex flex-col h-full overflow-hidden">
+          {openTabs.length > 0 ? (
+            <Tabs
+              value={activeTab}
+              onValueChange={(tabId) => {
+                setActiveTab(tabId);
+                const note = notes.find((n) => n.id === tabId);
+                if (note) setSelectedNote(note);
+              }}
+              className="flex-1"
+            >
+              <div className="border-b">
+                <TabsList className="w-auto justify-start h-10 rounded-none border-b bg-transparent p-0">
+                  {openTabs.map((tab) => (
+                    <TabsTrigger
+                      key={tab.id}
+                      value={tab.id}
+                      className="relative h-10 px-4 rounded-none border-r data-[state=active]:bg-gray-200 data-[state=active]:shadow-none"
                     >
-                      <X className="h-3 w-3" />
-                    </div>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+                      {tab.title}
+                      <div
+                        className="ml-2 hover:bg-muted rounded-sm p-1 cursor-pointer inline-flex items-center justify-center"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeTab(tab.id);
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </div>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+              {openTabs.map((tab) => (
+                <TabsContent key={tab.id} value={tab.id} className="flex-1 mt-[-0.4rem]">
+                  <div className="p-4 h-full overflow-auto">
+                    <NoteCard noteId={tab.id} initialTiles={tab.tiles || []} />
+                  </div>
+                </TabsContent>
+              ))}
+            </Tabs>
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-500">
+              Select a note or create a new one
             </div>
-            {openTabs.map((tab) => (
-              <TabsContent key={tab.id} value={tab.id} className="flex-1 mt-[-0.4rem]">
-                <div className="p-4 h-full overflow-auto">
-                  <NoteCard noteId={tab.id} initialTiles={tab.tiles || []} />
-                </div>
-              </TabsContent>
-            ))}
-          </Tabs>
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            Select a note or create a new one
-          </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 } 
