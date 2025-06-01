@@ -61,7 +61,7 @@ export function AIChatInput({ onResponse, disabled = false }: AIChatInputProps) 
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ask AI to help with your notes..."
-          className="pr-12 min-h-[40px] focus:min-h-[120px] transition-all duration-200 ease-in-out resize-none"
+          className="pr-12 min-h-[40px] w-200 bg-background transition-all duration-200 ease-in-out resize-none"
           disabled={isLoading || disabled}
         />
         <Button

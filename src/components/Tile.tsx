@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Pencil, Trash2, Bold, Italic, Heading1, Heading2, List, ListOrdered, Save, Volume2, VolumeX, Loader2, Eye, EyeOff, AlertCircle, Brain, X } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -60,6 +60,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
   const [revealedWords, setRevealedWords] = useState<Set<string>>(new Set());
   const [isAudioError, setIsAudioError] = useState(false);
   const [highlightedWords, setHighlightedWords] = useState<string[]>([]);
+  const [isAIInputExpanded, setIsAIInputExpanded] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -167,10 +168,10 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
       target.parentNode?.replaceChild(textNode, target);
 
       // Get the updated HTML content
-      const updatedContent = contentRef.current?.innerHTML || '';
+      const updatedContent = assignUniqueIDs(contentRef.current?.innerHTML || '');
       
       // Update editor content immediately for instant feedback
-      editor?.commands.setContent(processContent(updatedContent));
+      editor?.commands.setContent(updatedContent);
       
       try {
         await onUpdate(id, title, updatedContent);
@@ -185,7 +186,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
         textNode.parentNode?.replaceChild(mark, textNode);
         mark.appendChild(document.createTextNode(text));
         
-        editor?.commands.setContent(processContent(contentRef.current?.innerHTML || ''));
+        editor?.commands.setContent(assignUniqueIDs(contentRef.current?.innerHTML || ''));
         
         toast({
           title: "Error",
@@ -209,10 +210,10 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
       range.surroundContents(span);
 
       // Get the updated HTML content
-      const updatedContent = contentRef.current?.innerHTML || '';
+      const updatedContent = assignUniqueIDs(contentRef.current?.innerHTML || '');
       
       // Update editor content immediately for instant feedback
-      editor?.commands.setContent(processContent(updatedContent));
+      editor?.commands.setContent(updatedContent);
       
       try {
         await onUpdate(id, title, updatedContent);
@@ -225,7 +226,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
         const textNode = document.createTextNode(selectedText);
         span.parentNode?.replaceChild(textNode, span);
         
-        editor?.commands.setContent(processContent(contentRef.current?.innerHTML || ''));
+        editor?.commands.setContent(assignUniqueIDs(contentRef.current?.innerHTML || ''));
         
         toast({
           title: "Error",
@@ -236,16 +237,28 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
     }
   };
 
-  // Update processContent function to be more strict about highlight removal
+  // Function to assign unique IDs to highlighted words
+  const assignUniqueIDs = (html: string) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const highlightedSpans = doc.querySelectorAll('mark.bg-yellow-200');
+    highlightedSpans.forEach((span, index) => {
+      span.id = `highlight-${index}`; // Assign unique ID
+    });
+    return doc.body.innerHTML;
+  };
+
+  // Update processContent function to use assignUniqueIDs
   const processContent = (html: string) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     
     // Find all spans with bg-yellow-200 class and convert them to mark elements
     const highlightedSpans = doc.querySelectorAll('span.bg-yellow-200');
-    highlightedSpans.forEach(span => {
+    highlightedSpans.forEach((span, index) => {
       const mark = document.createElement('mark');
       mark.className = 'bg-yellow-200';
+      mark.id = `highlight-${index}`; // Assign unique ID
       span.parentNode?.replaceChild(mark, span);
       while (span.firstChild) {
         mark.appendChild(span.firstChild);
@@ -827,8 +840,30 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
     }
   }, [isEditing, content]);
 
+  // Refine scrollToHighlight to adjust the scroll position
+  const scrollToHighlight = (id: string) => {
+    const element = document.getElementById(id);
+    const container = element?.closest('.overflow-y-auto'); // Find the closest scrollable container
+    if (element && container) {
+      const elementPosition = element.offsetTop;
+      const containerHeight = container.clientHeight;
+      const elementHeight = element.clientHeight;
+      const offset = elementPosition - (containerHeight / 2) + (elementHeight / 2); // Center the element
+      container.scrollTo({ top: offset, behavior: 'smooth' });
+      element.style.border = '2px solid red'; // Add border
+      setTimeout(() => {
+        element.style.border = 'none'; // Remove border after 2 seconds
+      }, 2000);
+    }
+  };
+
+  // Function to toggle the AI input field
+  const toggleAIInput = () => {
+    setIsAIInputExpanded(!isAIInputExpanded);
+  };
+
   return (
-    <Card className={`relative max-h-[700px] ${getTileColor(position)} ${isFocused ? 'ring-1 ring-primary ring-offset-1' : ''}`}>
+    <Card className={`relative max-h-[700px]  ${getTileColor(position)} ${isFocused ? 'ring-1  ring-offset-1 ' : ''}`}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">
           {isEditing ? (
@@ -844,10 +879,13 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
               className="cursor-pointer"
               onDoubleClick={() => setIsEditing(true)}
             >
-              {title}
+                <div className="text-lg font-medium">{title}</div>
+              
             </div>
           )}
         </CardTitle>
+      
+
         <div className="flex items-center gap-2">
           {isFocused && (
             <>
@@ -902,8 +940,13 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
             </>
           )}
         </div>
+        
+
       </CardHeader>
-      <CardContent className={`space-y-4 ${isFocused ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+      <hr className=" border-t border-gray-300" />
+      
+      
+      <CardContent className={`space-y-4  ${isFocused ? 'overflow-y-auto max-h-[500px]' : 'overflow-hidden '}`}>
         {isEditing ? (
           <div className="space-y-4">
             <div className="flex gap-2 p-2 border rounded-md">
@@ -1038,10 +1081,14 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
                   dangerouslySetInnerHTML={{ __html: processContent(content || '') }}
                 />
                  {/* Display highlighted words on the right side */}
-                 <div className={`sticky top-0  mr-2  border rounded-md p-2 ${getTileColor(position)} shadow  w-40  ${isFocused ? 'max-h-[480px] overflow-y-auto' : 'max-h-[200px] overflow-y-auto'}` }>
+                 <div className={`absolute right-4 top-20  mr-2  border rounded-md p-2 ${getTileColor(position)} shadow  w-40  ${isFocused ? 'max-h-[400px] overflow-y-auto' : 'max-h-[200px] overflow-y-auto'}` }>
   <ul className="list-disc pl-4 space-y-1">
     {highlightedWords.map((word, index) => (
-      <li key={index}>{word}</li>
+      <li key={index}>
+        <button onClick={() => scrollToHighlight(`highlight-${index}`)} className="text-blue-500 hover:underline focus:outline-none">
+          {word}
+        </button>
+      </li>
     ))}
   </ul>
         </div>
@@ -1159,7 +1206,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
                         dangerouslySetInnerHTML={{ __html: currentTypingContent }}
                       />
                     )}
-                    <div className="flex gap-2 justify-end">
+                    <div className="flex gap-2 justify-start">
                       <Button
                         variant="outline"
                         size="sm"
@@ -1231,14 +1278,30 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
             )}
           </>
         )}
-        {!isEditing && isFocused && (
-          <div className="sticky bottom-0 bg-background p-3">
-            <AIChatInput onResponse={handleAIResponse} disabled={isTyping} />
-          </div>
-        )}
+       
        
 
       </CardContent>
+     <CardFooter> {!isEditing && isFocused && (
+          <div className="">
+            <div className={`absolute bottom-2 right-2 p-3 ${getTileColor(position)}`}>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={toggleAIInput}
+                className="rounded-full h-12 w-12 shadow-lg"
+              >
+                <Brain className="h-6 w-6" />
+              </Button>
+            </div>
+            {isAIInputExpanded && (
+              <div className="absolute bottom-0 right-20 p-3 transition-all duration-300 ease-in-out">
+                <AIChatInput onResponse={handleAIResponse} disabled={isTyping} />
+              </div>
+            )}
+          </div>
+        )}
+        </CardFooter>
     </Card>
   );
 } 

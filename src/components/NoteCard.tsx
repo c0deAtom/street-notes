@@ -156,7 +156,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
   };
 
   return (
-    <div className="relative min-h-[calc(100vh-8rem)]">
+    <div className="relative min-h-[calc(100vh-10rem)] ">
       <div className="absolute top-0 right-0 z-10">
         <Button 
           size="icon" 
@@ -167,36 +167,38 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
         </Button>
       </div>
 
-      <div className="grid gap-4 pt-16 max-h-[calc(100vh-8rem)] overflow-y-auto pr-4 px-3">
-        {tiles.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-[calc(100vh-16rem)] text-muted-foreground">
-            <p className="text-lg mb-4">No tiles yet</p>
-            <p className="text-sm">Click the + button to add your first tile</p>
-          </div>
-        ) : (
-          tiles.map((tile) => (
-            <div
-              key={tile.id}
-              onClick={() => handleTileFocus(tile.id)}
-              className={`transition-all duration-200 ${
-                focusedTileId === tile.id
-                  ? 'opacity-100 scale-100'
-                  : 'opacity-85 scale-98 hover:opacity-95 hover:scale-99'
-              }`}
-            >
-              <Tile
-                id={tile.id}
-                title={tile.title}
-                content={tile.content}
-                position={tile.position}
-                onUpdate={updateTile}
-                onDelete={deleteTile}
-                isFocused={focusedTileId === tile.id}
-                isDeleting={deletingTileId === tile.id}
-              />
+      <div className="grid gap-4 pt-2 max-h-[calc(100vh-8rem)] overflow-y-auto pr-4 px-3">
+        <div className="pb-40 flex flex-col gap-8  ">
+          {tiles.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-[calc(100vh-16rem)] text-muted-foreground">
+              <p className="text-lg mb-4">No tiles yet</p>
+              <p className="text-sm">Click the + button to add your first tile</p>
             </div>
-          ))
-        )}
+          ) : (
+            tiles.map((tile) => (
+              <div
+                key={tile.id}
+                onClick={() => handleTileFocus(tile.id)}
+                className={`transition-all duration-200 ${
+                  focusedTileId === tile.id
+                    ? 'opacity-100 scale-100'
+                    : 'opacity-85 scale-98 hover:opacity-95 hover:scale-99'
+                }`}
+              >
+                <Tile
+                  id={tile.id}
+                  title={tile.title}
+                  content={tile.content}
+                  position={tile.position}
+                  onUpdate={updateTile}
+                  onDelete={deleteTile}
+                  isFocused={focusedTileId === tile.id}
+                  isDeleting={deletingTileId === tile.id}
+                />
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

@@ -216,7 +216,7 @@ export default function NotesPage() {
               </TabsList>
             </div>
             {openTabs.map((tab) => (
-              <TabsContent key={tab.id} value={tab.id} className="flex-1 mt-0">
+              <TabsContent key={tab.id} value={tab.id} className="flex-1 mt-[-0.4rem]">
                 <div className="p-4 h-full overflow-auto">
                   <NoteCard noteId={tab.id} initialTiles={tab.tiles || []} />
                 </div>
