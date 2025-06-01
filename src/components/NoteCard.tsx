@@ -162,8 +162,8 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
               <p className="text-lg mb-4">No tiles yet</p>
               <p className="text-sm">Click the + button to add your first tile</p>
             </div>
-          ) : (<div>
-            <div className="h-12"></div>
+          ) : (<div className="flex flex-col gap-4">
+            <div className="h-12 "></div>
             {tiles.map((tile) => (
               <div
                 key={tile.id}

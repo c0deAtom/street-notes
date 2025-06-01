@@ -63,6 +63,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
   const [isAudioError, setIsAudioError] = useState(false);
   const [highlightedWords, setHighlightedWords] = useState<string[]>([]);
   const [isAIInputExpanded, setIsAIInputExpanded] = useState(false);
+  const [showMobileHighlights, setShowMobileHighlights] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -126,6 +127,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
       if (contentRef.current) {
         contentRef.current.innerHTML = processContent(content);
       }
+      updateHighlightedWords();
     } catch (error) {
       toast({
         title: "Error",
@@ -142,6 +144,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
     if (contentRef.current) {
       contentRef.current.innerHTML = processContent(content || '');
     }
+    updateHighlightedWords();
   };
 
   const toggleHighlight = useCallback(() => {
@@ -167,124 +170,32 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
     // Don't clear the selection, let it remain selected
   };
 
-  // Assigns unique IDs to <mark> tags based on their current order in the HTML
-  function reassignMarkIDs(html: string): string {
+  // Utility to assign unique highlight IDs per tile
+  function assignTileHighlightIDs(html: string, tileId: string): string {
     if (!html) return html;
-    // Use DOMParser to parse and reassign IDs
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     const marks = doc.querySelectorAll('mark');
     marks.forEach((mark, idx) => {
-      mark.id = `highlight-${idx}`;
+      mark.id = `highlight-${tileId}-${idx}`;
     });
     return doc.body.innerHTML;
   }
 
-  const handleDoubleClick = async (event: React.MouseEvent<HTMLDivElement>) => {
-    if (isQuizMode || isEditing) return;
-
-    const target = event.target as HTMLElement;
-    if (target.tagName === 'MARK' || target.classList.contains('bg-yellow-200')) {
-      // Get the text content before removing the highlight
-      const text = target.textContent || '';
-      
-      // Create a text node to replace the highlighted element
-      const textNode = document.createTextNode(text);
-      target.parentNode?.replaceChild(textNode, target);
-
-      // Get the updated HTML content
-      let updatedContent = contentRef.current?.innerHTML || '';
-      updatedContent = reassignMarkIDs(updatedContent);
-      
-      // Update editor content immediately for instant feedback
-      editor?.commands.setContent(updatedContent);
-      
-      try {
-        await onUpdate(id, title, updatedContent);
-        toast({
-          title: "Success",
-          description: "Highlight removed",
-        });
-      } catch (error) {
-        // Revert the change if the update fails
-        const mark = document.createElement('mark');
-        mark.className = 'bg-yellow-200';
-        textNode.parentNode?.replaceChild(mark, textNode);
-        mark.appendChild(document.createTextNode(text));
-        
-        let revertedContent = contentRef.current?.innerHTML || '';
-        revertedContent = reassignMarkIDs(revertedContent);
-        editor?.commands.setContent(revertedContent);
-        
-        toast({
-          title: "Error",
-          description: "Failed to remove highlight",
-          variant: "destructive",
-        });
-      }
-    } else {
-      // Handle double-click to highlight
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed) return;
-
-      const range = selection.getRangeAt(0);
-      const selectedText = selection.toString().trim();
-      
-      if (!selectedText) return;
-
-      // Create a temporary span to highlight the selected text
-      const span = document.createElement('mark');
-      span.className = 'bg-yellow-300';
-      range.surroundContents(span);
-
-      // Get the updated HTML content
-      let updatedContent = contentRef.current?.innerHTML || '';
-      updatedContent = reassignMarkIDs(updatedContent);
-      
-      // Update editor content immediately for instant feedback
-      editor?.commands.setContent(updatedContent);
-      
-      try {
-        await onUpdate(id, title, updatedContent);
-        toast({
-          title: "Success",
-          description: "Text highlighted",
-        });
-      } catch (error) {
-        // Revert the change if the update fails
-        const textNode = document.createTextNode(selectedText);
-        span.parentNode?.replaceChild(textNode, span);
-        
-        let revertedContent = contentRef.current?.innerHTML || '';
-        revertedContent = reassignMarkIDs(revertedContent);
-        editor?.commands.setContent(revertedContent);
-        
-        toast({
-          title: "Error",
-          description: "Failed to highlight text",
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  // Update processContent function to use assignUniqueIDs
   const processContent = (html: string) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
-    
     // Find all spans with bg-yellow-200 class and convert them to mark elements
     const highlightedSpans = doc.querySelectorAll('span.bg-yellow-200');
     highlightedSpans.forEach((span, index) => {
       const mark = document.createElement('mark');
       mark.className = 'bg-yellow-200';
-      mark.id = `highlight-${index}`; // Assign unique ID
+      mark.id = `highlight-${id}-${index}`;
       span.parentNode?.replaceChild(mark, span);
       while (span.firstChild) {
         mark.appendChild(span.firstChild);
       }
     });
-
     // Remove any duplicate mark elements
     const marks = doc.querySelectorAll('mark');
     marks.forEach(mark => {
@@ -294,8 +205,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
         mark.parentElement.parentNode?.replaceChild(textNode, mark.parentElement);
       }
     });
-
-    return doc.body.innerHTML;
+    return assignTileHighlightIDs(doc.body.innerHTML, id);
   };
 
   const handleEditClick = () => {
@@ -860,19 +770,19 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
     }
   }, [isEditing, content]);
 
-  // Refine scrollToHighlight to adjust the scroll position
-  const scrollToHighlight = (id: string) => {
-    const element = document.getElementById(id);
-    const container = element?.closest('.overflow-y-auto'); // Find the closest scrollable container
+  // Update scrollToHighlight to use the new ID format
+  const scrollToHighlight = (highlightId: string) => {
+    const element = document.getElementById(`highlight-${id}-${highlightId}`) || document.getElementById(highlightId);
+    const container = element?.closest('.overflow-y-auto');
     if (element && container) {
       const elementPosition = element.offsetTop;
       const containerHeight = container.clientHeight;
       const elementHeight = element.clientHeight;
-      const offset = elementPosition - (containerHeight / 2) + (elementHeight / 2); // Center the element
+      const offset = elementPosition - (containerHeight / 2) + (elementHeight / 2);
       container.scrollTo({ top: offset, behavior: 'smooth' });
-      element.style.border = '2px solid red'; // Add border
+      element.style.border = '2px solid red';
       setTimeout(() => {
-        element.style.border = 'none'; // Remove border after 2 seconds
+        element.style.border = 'none';
       }, 2000);
     }
   };
@@ -880,6 +790,59 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
   // Function to toggle the AI input field
   const toggleAIInput = () => {
     setIsAIInputExpanded(!isAIInputExpanded);
+  };
+
+  // Restore handleDoubleClick, but update to use reassignMarkIDs with highlight-${id}-${idx}
+  const handleDoubleClick = async (event: React.MouseEvent<HTMLDivElement>) => {
+    if (isQuizMode || isEditing) return;
+    const target = event.target as HTMLElement;
+    if (target.tagName === 'MARK' || target.classList.contains('bg-yellow-200')) {
+      // Remove highlight
+      const text = target.textContent || '';
+      const textNode = document.createTextNode(text);
+      target.parentNode?.replaceChild(textNode, target);
+      let updatedContent = contentRef.current?.innerHTML || '';
+      updatedContent = assignTileHighlightIDs(updatedContent, id);
+      editor?.commands.setContent(updatedContent);
+      try {
+        await onUpdate(id, title, updatedContent);
+        toast({ title: 'Success', description: 'Highlight removed' });
+      } catch (error) {
+        // Revert the change if the update fails
+        const mark = document.createElement('mark');
+        mark.className = 'bg-yellow-200';
+        textNode.parentNode?.replaceChild(mark, textNode);
+        mark.appendChild(document.createTextNode(text));
+        let revertedContent = contentRef.current?.innerHTML || '';
+        revertedContent = assignTileHighlightIDs(revertedContent, id);
+        editor?.commands.setContent(revertedContent);
+        toast({ title: 'Error', description: 'Failed to remove highlight', variant: 'destructive' });
+      }
+    } else {
+      // Add highlight
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) return;
+      const range = selection.getRangeAt(0);
+      const selectedText = selection.toString().trim();
+      if (!selectedText) return;
+      const span = document.createElement('mark');
+      
+      range.surroundContents(span);
+      let updatedContent = contentRef.current?.innerHTML || '';
+      updatedContent = assignTileHighlightIDs(updatedContent, id);
+      editor?.commands.setContent(updatedContent);
+      try {
+        await onUpdate(id, title, updatedContent);
+        toast({ title: 'Success', description: 'Text highlighted' });
+      } catch (error) {
+        const textNode = document.createTextNode(selectedText);
+        span.parentNode?.replaceChild(textNode, span);
+        let revertedContent = contentRef.current?.innerHTML || '';
+        revertedContent = assignTileHighlightIDs(revertedContent, id);
+        editor?.commands.setContent(revertedContent);
+        toast({ title: 'Error', description: 'Failed to highlight text', variant: 'destructive' });
+      }
+    }
   };
 
   return (
@@ -1093,9 +1056,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
               <div className="flex items-top justify-between">
                 <div 
                   ref={contentRef}
-                  className={`prose prose-sm max-w-280  ${isFocused ? 'cursor-pointer' : 'cursor-default'} ${
-                    !isFocused ? 'max-h-[200px] overflow-hidden' : ''
-                  }`}
+                  className={`prose prose-sm max-w-280 overflow-y-auto max-h-[400px]  ${isFocused ? 'cursor-pointer' : 'cursor-default'}`}
                   onClick={handleWordClick}
                   onDoubleClick={handleDoubleClick}
                   dangerouslySetInnerHTML={{ __html: processContent(content || '') }}
@@ -1105,7 +1066,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
   <ul className="list-disc pl-4 space-y-1">
     {highlightedWords.map((word, index) => (
       <li key={index}>
-        <button onClick={() => scrollToHighlight(`highlight-${index}`)} className="text-blue-500 hover:underline focus:outline-none">
+        <button onClick={() => scrollToHighlight(`${index}`)} className="text-blue-500 hover:underline focus:outline-none">
           {word}
         </button>
       </li>
@@ -1299,8 +1260,62 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
           </>
         )}
        
-       
-
+        {/* Mobile: Show button to open highlights list */}
+        <div className="block md:hidden mt-2">
+            <div className="absolute top-19 right-4">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2 "
+            onClick={() => setShowMobileHighlights((v) => !v)}
+          >
+            <List className="h-4 w-4" />
+            H
+          </Button>
+          </div>
+          {/* Slide-in panel for highlights */}
+          {showMobileHighlights && (
+            <div
+              className="fixed top-0 right-0 h-full w-64 bg-background shadow-lg z-[200] border-l flex flex-col p-4 transition-transform duration-300"
+              style={{ transform: showMobileHighlights ? 'translateX(0)' : 'translateX(100%)' }}
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-semibold">Highlighted Words</span>
+                <Button size="icon" variant="ghost" onClick={() => setShowMobileHighlights(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <ul className="list-disc pl-4 space-y-1 overflow-y-auto flex-1">
+                {highlightedWords.length === 0 ? (
+                  <li className="text-muted-foreground text-sm">No highlights</li>
+                ) : (
+                  highlightedWords.map((word, index) => (
+                    <li key={index}>
+                      <button
+                        onClick={() => {
+                          scrollToHighlight(`${index}`);
+                          setShowMobileHighlights(false);
+                          console.log('clicked', word);
+                        }}
+                        className="text-blue-500 hover:underline focus:outline-none text-left"
+                      >
+                        {word}
+                      </button>
+                    </li>
+                    
+                  ))
+                )}
+              </ul>
+            </div>
+          )}
+          {/* Overlay to close on outside click */}
+          {showMobileHighlights && (
+            <div
+              className="fixed inset-0 z-[199] bg-black/10"
+              onClick={() => setShowMobileHighlights(false)}
+            />
+          )}
+        </div>
       </CardContent>
      <CardFooter> {!isEditing && isFocused && (
           <div className="">
