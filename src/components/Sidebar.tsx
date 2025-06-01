@@ -25,7 +25,7 @@ interface Note {
   tiles: Tile[];
   createdAt: Date;
   position: number;
-  highlightedWords: string[];
+  
 }
 
 interface SidebarProps {
