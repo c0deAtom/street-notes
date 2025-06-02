@@ -173,7 +173,7 @@ export default function NotesPage() {
         setActiveTab={setActiveTab}
         setSelectedNote={setSelectedNote}
         setOpenTabs={setOpenTabs}
-        onSidebarOpen={() => setIsSidebarOpen(prev => !prev)}
+        onSidebarOpen={() => setIsSidebarOpen(true)}
       />
       <MobileSidebar
         notes={notes}
@@ -238,7 +238,7 @@ export default function NotesPage() {
               {openTabs.map((tab) => (
                 <TabsContent key={tab.id} value={tab.id} className="flex-1 mt-[-0.4rem]">
                   <div className=" h-full overflow-auto">
-                    <NoteCard noteId={tab.id} initialTiles={tab.tiles || []} />
+                    <NoteCard noteId={tab.id} initialTiles={tab.tiles || []} sidebarWidth={mobileSidebarWidth} />
                   </div>
                 </TabsContent>
               ))}

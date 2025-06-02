@@ -38,9 +38,10 @@ interface TileProps {
   isDeleting?: boolean;
   isListMode?: boolean;
   onFocus?: () => void;
+  sidebarWidth?: number;
 }
 
-export function Tile({ id, title, content, position, onUpdate, onDelete, isFocused, isDeleting = false, isListMode = false, onFocus }: TileProps) {
+export function Tile({ id, title, content, position, onUpdate, onDelete, isFocused, isDeleting = false, isListMode = false, onFocus, sidebarWidth }: TileProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
   const [isTyping, setIsTyping] = useState(false);
@@ -66,6 +67,8 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
   const [highlightedWords, setHighlightedWords] = useState<string[]>([]);
   const [isAIInputExpanded, setIsAIInputExpanded] = useState(false);
   const [showMobileHighlights, setShowMobileHighlights] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isSaveClicked, setIsSaveClicked] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -118,6 +121,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
   }, [editor, content, isEditing]);
 
   const handleSave = async () => {
+    setIsSaveClicked(false);
     try {
       const content = editor?.getHTML() || '';
       await onUpdate(id, editTitle, content);
@@ -136,6 +140,12 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
         description: "Failed to update tile",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (!isSaveClicked) {
+      handleCancel();
     }
   };
 
@@ -864,10 +874,12 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
         <CardTitle className="text-sm font-medium">
           {isEditing ? (
             <Input
+              ref={inputRef}
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
-              onBlur={handleSave}
+              onBlur={handleInputBlur}
               onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              style={sidebarWidth ? { width: Math.max(120, sidebarWidth - 80) } : {}}
               className="h-7"
             />
           ) : (
@@ -1051,6 +1063,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
               <Button
                 variant="default"
                 size="sm"
+                onMouseDown={() => setIsSaveClicked(true)}
                 onClick={handleSave}
                 className="h-8"
               >
@@ -1289,7 +1302,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
           {/* Slide-in panel for highlights */}
           {showMobileHighlights && (
             <div
-              className="fixed top-0 right-0 h-full w-64 bg-background shadow-lg z-[200] border-l flex flex-col p-4 transition-transform duration-300"
+              className="fixed top-0 right-0 h-full w-40 rounded-l-lg bg-background shadow-lg z-[200] border-l flex flex-col p-4 transition-transform duration-300"
               style={{ transform: showMobileHighlights ? 'translateX(0)' : 'translateX(100%)' }}
             >
               <div className="flex justify-between items-center mb-2">

@@ -10,6 +10,7 @@ import type { Note, Tile } from '@/types';
 interface NoteCardProps {
   noteId: string;
   initialTiles?: Tile[];
+  sidebarWidth?: number;
 }
 
 // Placeholder function to update note highlights in the database
@@ -18,7 +19,7 @@ const updateNoteHighlightsInDatabase = (noteId: string, highlights: string[]) =>
   console.log(`Updating highlights for note ${noteId}:`, highlights);
 };
 
-export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
+export function NoteCard({ noteId, initialTiles = [], sidebarWidth }: NoteCardProps) {
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [focusedTileId, setFocusedTileId] = useState<string | null>(null);
   const [isAddingTile, setIsAddingTile] = useState(false);
@@ -196,6 +197,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
                   isDeleting={deletingTileId === tile.id}
                   isListMode={isListMode}
                   onFocus={() => handleTileFocus(tile.id)}
+                  sidebarWidth={sidebarWidth}
                 />
               </div>
             ))}
