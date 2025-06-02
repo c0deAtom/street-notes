@@ -187,16 +187,18 @@ export default function NotesPage() {
         setSidebarWidth={setMobileSidebarWidth}
       />
       <div className="flex relative h-[calc(100vh-4rem)]">
-        <Sidebar
-          notes={notes}
-          selectedNote={selectedNote}
-          onNoteSelect={handleNoteSelect}
-          onAddNote={createBlankNote}
-          onExpand={setIsSidebarExpanded}
-          onDeleteNotes={handleDeleteNotes}
-        />
+        <div className="hidden md:block h-full">
+          <Sidebar
+            notes={notes}
+            selectedNote={selectedNote}
+            onNoteSelect={handleNoteSelect}
+            onAddNote={createBlankNote}
+            onExpand={setIsSidebarExpanded}
+            onDeleteNotes={handleDeleteNotes}
+          />
+        </div>
         <div
-          className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-300`}
+          className={`w-full md:flex-1 flex flex-col h-full overflow-hidden transition-all duration-300`}
           style={{
             marginLeft: isSidebarOpen && typeof window !== 'undefined' && window.innerWidth < 768 ? mobileSidebarWidth : undefined,
             transition: 'margin-left 0.3s',

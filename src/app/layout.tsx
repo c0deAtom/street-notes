@@ -18,10 +18,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={inter.className + ' w-full min-h-screen overflow-x-hidden'}>
         <Providers>
-          <div className="min-h-screen flex flex-col">
-            <main className="flex-1">
+          <div className="w-full min-h-screen flex flex-col">
+            <main className="flex-1 w-full">
               {children}
             </main>
           </div>

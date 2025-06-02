@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Trash2, Loader2, X, Pencil, Check } from 'lucide-react';
+import { Plus, Trash2, Loader2, X, Pencil, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
 import type { Note } from '@/types';
@@ -27,6 +27,7 @@ export function MobileSidebar({ notes, selectedNote, onNoteSelect, onAddNote, on
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState<string>("");
   const [isResizing, setIsResizing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -138,21 +139,86 @@ export function MobileSidebar({ notes, selectedNote, onNoteSelect, onAddNote, on
     };
   }, [isOpen, onClose]);
 
+  // Expand/collapse sidebar
+  const minSidebarWidth = 110;
+  const maxSidebarWidth = 300;
+  const isExpanded = sidebarWidth > minSidebarWidth + 10;
+  const dragState = useRef<{ startX: number; startWidth: number; dragging: boolean }>({ startX: 0, startWidth: 0, dragging: false });
+
+  const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    setIsDragging(true);
+    dragState.current.dragging = false;
+    let clientX = 0;
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+    } else if ('clientX' in e) {
+      clientX = e.clientX;
+    }
+    dragState.current.startX = clientX;
+    dragState.current.startWidth = sidebarWidth;
+    document.addEventListener('mousemove', handleDragMove as any);
+    document.addEventListener('touchmove', handleDragMove as any);
+    document.addEventListener('mouseup', handleDragEnd as any);
+    document.addEventListener('touchend', handleDragEnd as any);
+  };
+
+  const handleDragMove = (e: MouseEvent | TouchEvent) => {
+    let clientX = 0;
+    if ('touches' in e && e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+    } else if ('clientX' in e) {
+      clientX = e.clientX;
+    }
+    const delta = clientX - dragState.current.startX;
+    if (Math.abs(delta) > 2) dragState.current.dragging = true;
+    let newWidth = dragState.current.startWidth + delta;
+    newWidth = Math.max(minSidebarWidth, Math.min(newWidth, maxSidebarWidth));
+    setSidebarWidth(newWidth);
+  };
+
+  const handleDragEnd = (e: MouseEvent | TouchEvent) => {
+    setIsDragging(false);
+    document.removeEventListener('mousemove', handleDragMove as any);
+    document.removeEventListener('touchmove', handleDragMove as any);
+    document.removeEventListener('mouseup', handleDragEnd as any);
+    document.removeEventListener('touchend', handleDragEnd as any);
+    let clientX = 0;
+    if ('changedTouches' in e && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX;
+    } else if ('clientX' in e) {
+      clientX = e.clientX;
+    }
+    const delta = clientX - dragState.current.startX;
+    // If not dragged much, treat as click
+    if (Math.abs(delta) < 5) {
+      toggleSidebarWidth();
+    }
+    dragState.current.dragging = false;
+  };
+
+  const toggleSidebarWidth = () => {
+    setSidebarWidth(isExpanded ? minSidebarWidth : maxSidebarWidth);
+  };
+
   return (
     <div
       ref={sidebarRef}
-      className={`fixed left-0 top-16 bottom-0 z-50 bg-background/95 transition-all duration-300 md:hidden ${isOpen ? 'block' : 'hidden'} shadow-lg border-r`}
+      className={`fixed left-0 top-16 bottom-0 z-50 bg-background/95 ${!isDragging ? 'transition-all duration-300' : ''} md:hidden ${isOpen ? 'block' : 'hidden'} shadow-lg border-r`}
       style={{ backdropFilter: 'blur(2px)', width: sidebarWidth }}
     >
-      {/* Drag handle */}
-      <button
-        type="button"
-        aria-label="Resize sidebar"
-        className="absolute top-0 right-0 h-full w-2 cursor-ew-resize bg-transparent z-50"
-        style={{ touchAction: 'none' }}
-        onMouseDown={startResize}
-        onTouchStart={startResize}
-      />
+      {/* Expand/collapse button */}
+      <Button
+        variant="outline"
+        size="icon"
+        className="absolute top-1/2 -translate-y-1/2 right-0 z-50 border-l rounded-l-none rounded-r-md bg-background shadow"
+        style={{ right: -20, width: 20, height: 90 }}
+        onMouseDown={handleDragStart}
+        onTouchStart={handleDragStart}
+        tabIndex={0}
+        aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+      >
+        {isExpanded ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+      </Button>
       <hr className="border-t border-gray-200" />
       <div className="flex flex-col h-full overflow-y-auto pt-2">
         <div className="p-4 flex items-center justify-between">
