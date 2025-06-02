@@ -780,9 +780,10 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
       const elementHeight = element.clientHeight;
       const offset = elementPosition - (containerHeight / 2) + (elementHeight / 2);
       container.scrollTo({ top: offset, behavior: 'smooth' });
-      element.style.border = '2px solid red';
+      element.style.boxShadow = '0 0 0 3px #ef4444'; // red-500
+      element.style.borderRadius = '4px';
       setTimeout(() => {
-        element.style.border = 'none';
+        element.style.boxShadow = '';
       }, 2000);
     }
   };

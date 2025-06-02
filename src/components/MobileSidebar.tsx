@@ -1,25 +1,24 @@
-'use client';
-
-import { useState, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Trash2, Loader2, X, Pencil, Check } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
-import type { Note, Tile } from '@/types';
+import type { Note } from '@/types';
 
-interface SidebarProps {
+interface MobileSidebarProps {
   notes: Note[];
   selectedNote: Note | null;
   onNoteSelect: (note: Note | null) => void;
   onAddNote: () => Promise<void>;
-  onExpand: (expanded: boolean) => void;
   onDeleteNotes: (noteIds: string[]) => void;
+  isOpen: boolean;
+  onClose: () => void;
+  sidebarWidth: number;
+  setSidebarWidth: (width: number) => void;
 }
 
-export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand, onDeleteNotes }: SidebarProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+export function MobileSidebar({ notes, selectedNote, onNoteSelect, onAddNote, onDeleteNotes, isOpen, onClose, sidebarWidth, setSidebarWidth }: MobileSidebarProps) {
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [isAddingNote, setIsAddingNote] = useState(false);
@@ -27,12 +26,9 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
   const [isBigView, setIsBigView] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState<string>("");
+  const [isResizing, setIsResizing] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-
-  const handleExpand = (expanded: boolean) => {
-    setIsExpanded(expanded);
-    onExpand(expanded);
-  };
 
   const toggleDeleteMode = () => {
     setIsDeleteMode(!isDeleteMode);
@@ -41,8 +37,8 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
 
   const handleNoteSelect = (note: Note) => {
     if (isDeleteMode) {
-      setSelectedNotes(prev => 
-        prev.includes(note.id) 
+      setSelectedNotes(prev =>
+        prev.includes(note.id)
           ? prev.filter(id => id !== note.id)
           : [...prev, note.id]
       );
@@ -89,18 +85,64 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
     }
   };
 
+  // Drag handlers for resizing
+  const startResize = (e: React.MouseEvent | React.TouchEvent) => {
+    setIsResizing(true);
+    document.body.style.cursor = 'ew-resize';
+  };
+  const stopResize = () => {
+    setIsResizing(false);
+    document.body.style.cursor = '';
+  };
+  const handleResize = (e: MouseEvent | TouchEvent) => {
+    if (!isResizing) return;
+    let clientX = 0;
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+    } else if ('clientX' in e) {
+      clientX = e.clientX;
+    }
+    const left = sidebarRef.current?.getBoundingClientRect().left || 0;
+    let newWidth = clientX - left;
+    newWidth = Math.max(110, Math.min(newWidth, 420)); // min/max width
+    setSidebarWidth(newWidth);
+  };
+  useEffect(() => {
+    if (!isResizing) return;
+    const move = (e: MouseEvent | TouchEvent) => handleResize(e);
+    const up = () => stopResize();
+    window.addEventListener('mousemove', move);
+    window.addEventListener('touchmove', move);
+    window.addEventListener('mouseup', up);
+    window.addEventListener('touchend', up);
+    return () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('mouseup', up);
+      window.removeEventListener('touchend', up);
+    };
+  }, [isResizing]);
+
   return (
-    <div 
-      className={`h-full border-r bg-background transition-all duration-300 ease-in-out hidden md:block ${
-        isExpanded ? 'w-64' : 'w-16'
-      }`}
-      onMouseEnter={() => handleExpand(true)}
-      onMouseLeave={() => handleExpand(false)}
+    <div
+      ref={sidebarRef}
+      className={`fixed left-0 top-16 bottom-0 z-50 bg-background/95 transition-all duration-300 md:hidden ${isOpen ? 'block' : 'hidden'} shadow-lg border-r`}
+      style={{ backdropFilter: 'blur(2px)', width: sidebarWidth }}
     >
-      <div className="flex flex-col h-full">
+      {/* Drag handle */}
+      <button
+        type="button"
+        aria-label="Resize sidebar"
+        className="absolute top-0 right-0 h-full w-2 cursor-ew-resize bg-transparent z-50"
+        style={{ touchAction: 'none' }}
+        onMouseDown={startResize}
+        onTouchStart={startResize}
+      />
+      <hr className="border-t border-gray-200" />
+      <div className="flex flex-col h-full overflow-y-auto pt-2">
         <div className="p-4 flex items-center justify-between">
-          {isExpanded && <h2 className="text-lg font-semibold">Notes</h2>}
-          <div className="sticky top-0 flex gap-2">
+          <h2 className="text-lg font-semibold"></h2>
+          <div className="flex gap-2">
             <Button
               variant="outline"
               size="icon"
@@ -114,7 +156,6 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                 <Plus className="h-4 w-4" />
               )}
             </Button>
-            {isExpanded && (
             <Button
               variant="outline"
               size="icon"
@@ -123,30 +164,30 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
             >
               {isBigView ? 'L' : 'V'}
             </Button>
-            )}
+           
           </div>
         </div>
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
-            <div className="p-2 space-y-2">
+            <div className="p-1 space-y-2">
               {notes.map((note) => (
                 <div
                   key={note.id}
                   className={`transition-all duration-200 ${
                     selectedNote?.id === note.id && !isDeleteMode
                       ? 'opacity-100 scale-100'
-                      : 'opacity-85 scale-98 hover:opacity-95 hover:scale-99'
+                      : 'opacity-85 scale-98 hover:opacity-95 hover:scale-99 '
                   }`}
                 >
                   <div
-                    className={`cursor-pointer transition-colors  flex items-left justify-left rounded-md border-2 ${
+                    className={`cursor-pointer transition-colors rounded-md border-2 ${
                       selectedNote?.id === note.id && !isDeleteMode
-                        ? 'bg-gray-200'
+                        ? 'bg-gray-200 '
                         : 'hover:bg-gray-200'
                     } ${isDeleteMode && selectedNotes.includes(note.id) ? 'border-primary' : ''}`}
                     onClick={() => handleNoteSelect(note)}
                   >
-                    <div className="p-3">
+                    <div className="px-3">
                       <div className="flex items-center gap-2">
                         {isDeleteMode && (
                           <Checkbox
@@ -156,12 +197,17 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                           />
                         )}
                         {editingNoteId === note.id ? (
+                              <div style={{ maxWidth: sidebarWidth - 60 }}>
+                              <div
+                                className="text-lg font-medium text-1xl break-words whitespace-pre-line"
+                                style={{ wordBreak: 'break-word' }}
+                              >
                           <form
                             onSubmit={e => {
                               e.preventDefault();
                               handleEditTitleSave(note);
                             }}
-                            className="flex items-center gap-1 w-full"
+                            className="flex items-center gap-1 w-full h-12 "
                           >
                             <input
                               className="text-sm font-medium truncate text-1xl border rounded px-1 py-0.5 w-24 bg-background"
@@ -174,13 +220,17 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                               <Check className="h-4 w-4" />
                             </Button>
                           </form>
-                        ) : (
-                          <>
-                            <div className="text-sm font-medium gap-2 min-h-12">
-                              <div className={isExpanded ? "text-sm font-medium text-1xl max-h-10 overflow-y-auto w-full" : "text-sm font-medium text-1xl max-h-10 overflow-y-auto w-5"}>
-                                {note.title}
-                              </div>
-                              {selectedNote?.id === note.id && (
+                            </div>
+                            </div>  ) : (
+                          <div className="flex items-center gap-2 min-h-12">
+                            {selectedNote?.id === note.id ? (
+                              <div style={{ maxWidth: sidebarWidth - 60 }}>
+                                <div
+                                  className="text-lg font-medium text-1xl break-words whitespace-pre-line"
+                                  style={{ wordBreak: 'break-word' }}
+                                >
+                                  {note.title}
+                                </div>
                                 <Button
                                   size="icon"
                                   variant="ghost"
@@ -193,12 +243,19 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
                                 >
                                   <Pencil className="h-4 w-4" />
                                 </Button>
-                              )}
-                            </div>
-                          </>
+                              </div>
+                            ) : (
+                             <div className="text-sm font-medium text-1xl "
+                                  
+                                >
+                                  {note.title}
+                                </div>
+                              
+                            )}
+                          </div>
                         )}
                       </div>
-                      {isExpanded && isBigView && (
+                      {isBigView && (
                         <div className="mt-2 text-xs text-muted-foreground">
                           {note.tiles.map(tile => (
                             <div key={tile.id} className="truncate">
@@ -231,35 +288,33 @@ export function Sidebar({ notes, selectedNote, onNoteSelect, onAddNote, onExpand
               ) : (
                 <>
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Selected ({selectedNotes.length})
+                   ({selectedNotes.length})
                 </>
               )}
             </Button>
           </div>
         )}
-        {isExpanded && (
-          <div className="flex justify-between items-center mb-2 px-2">
-            <Button
-              variant={isDeleteMode ? "destructive" : "outline"}
-              size="sm"
-              onClick={toggleDeleteMode}
-              className="w-full"
-              disabled={isDeletingNotes}
-            >
-              {isDeleteMode ? (
-                <>
-                  <X className="h-4 w-4 mr-2" />
-                  Cancel
-                </>
-              ) : (
-                <>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Notes
-                </>
-              )}
-            </Button>
-          </div>
-        )}
+        <div className="flex justify-between items-center mb-2 px-2">
+          <Button
+            variant={isDeleteMode ? "destructive" : "outline"}
+            size="sm"
+            onClick={toggleDeleteMode}
+            className="w-full"
+            disabled={isDeletingNotes}
+          >
+            {isDeleteMode ? (
+              <>
+                <X className="h-4 w-4 mr-2" />
+                Cancel
+              </>
+            ) : (
+              <>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/Sidebar';
+import { MobileSidebar } from '@/components/MobileSidebar';
 import { NoteCard } from '@/components/NoteCard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { X } from 'lucide-react';
@@ -22,6 +23,7 @@ export default function NotesPage() {
   const [openTabs, setOpenTabs] = useState<Note[]>([]);
   const [activeTab, setActiveTab] = useState<string | undefined>(undefined);
   const { toast } = useToast();
+  const [mobileSidebarWidth, setMobileSidebarWidth] = useState(110); // default to min width
 
   // Load saved tabs from localStorage on initial mount
   useEffect(() => {
@@ -173,6 +175,17 @@ export default function NotesPage() {
         setOpenTabs={setOpenTabs}
         onSidebarOpen={() => setIsSidebarOpen(prev => !prev)}
       />
+      <MobileSidebar
+        notes={notes}
+        selectedNote={selectedNote}
+        onNoteSelect={handleNoteSelect}
+        onAddNote={createBlankNote}
+        onDeleteNotes={handleDeleteNotes}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        sidebarWidth={mobileSidebarWidth}
+        setSidebarWidth={setMobileSidebarWidth}
+      />
       <div className="flex relative h-[calc(100vh-4rem)]">
         <Sidebar
           notes={notes}
@@ -181,10 +194,14 @@ export default function NotesPage() {
           onAddNote={createBlankNote}
           onExpand={setIsSidebarExpanded}
           onDeleteNotes={handleDeleteNotes}
-          isOpen={isSidebarOpen}
-          onClose={() => setIsSidebarOpen(false)}
         />
-        <div className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 ${isSidebarOpen ? 'ml-[120px] md:ml-0' : ''}` }>
+        <div
+          className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-300`}
+          style={{
+            marginLeft: isSidebarOpen && typeof window !== 'undefined' && window.innerWidth < 768 ? mobileSidebarWidth : undefined,
+            transition: 'margin-left 0.3s',
+          }}
+        >
           {openTabs.length > 0 ? (
             <Tabs
               value={activeTab}
@@ -203,7 +220,8 @@ export default function NotesPage() {
                       value={tab.id}
                       className="relative h-10 px-4 rounded-none border-r data-[state=active]:bg-gray-200 data-[state=active]:shadow-none"
                     >
-                      {tab.title}
+                      {tab.title.split(" ").slice(0, 3).join(" ")}{tab.title.split(" ").length > 3 && "..."}
+
                       <div
                         className="ml-2 hover:bg-muted rounded-sm p-1 cursor-pointer inline-flex items-center justify-center"
                         onClick={(e) => {
