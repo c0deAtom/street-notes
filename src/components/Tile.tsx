@@ -36,9 +36,11 @@ interface TileProps {
   onDelete: (id: string) => Promise<void>;
   isFocused: boolean;
   isDeleting?: boolean;
+  isListMode?: boolean;
+  onFocus?: () => void;
 }
 
-export function Tile({ id, title, content, position, onUpdate, onDelete, isFocused, isDeleting = false }: TileProps) {
+export function Tile({ id, title, content, position, onUpdate, onDelete, isFocused, isDeleting = false, isListMode = false, onFocus }: TileProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
   const [isTyping, setIsTyping] = useState(false);
@@ -845,6 +847,16 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
       }
     }
   };
+
+  if (isListMode && !isFocused) {
+    return (
+      <Card className={`cursor-pointer ${getTileColor(position)} transition-all`} onClick={onFocus}>
+        <CardHeader>
+          <CardTitle className="text-lg font-medium">{title}</CardTitle>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <Card className={`relative max-h-[700px]  ${getTileColor(position)} ${isFocused ? 'ring-1  ring-offset-1 ' : ''}`}>

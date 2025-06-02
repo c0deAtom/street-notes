@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, List, LayoutGrid } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Tile as TileComponent } from "./Tile";
 import type { Note, Tile } from '@/types';
@@ -25,6 +25,7 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
   const [deletingTileId, setDeletingTileId] = useState<string | null>(null);
   const { toast } = useToast();
   const tileRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const [isListMode, setIsListMode] = useState(false);
 
   useEffect(() => {
     // Only set tiles if initialTiles is not empty
@@ -145,13 +146,22 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
 
   return (
     <div className="relative min-h-[calc(100vh-10rem)] ">
-      <div className="absolute top-3 right-3 z-10">
+      <div className="absolute top-3 right-3 z-10 flex gap-2">
         <Button 
           size="icon" 
           className="rounded-full h-12 w-12 shadow-lg"
           onClick={addTile}
         >
           <Plus className="h-6 w-6" />
+        </Button>
+        <Button
+          size="icon"
+          className="rounded-full h-12 w-12 shadow-lg"
+          variant={isListMode ? "default" : "outline"}
+          onClick={() => setIsListMode((v) => !v)}
+          aria-label="Toggle list mode"
+        >
+          {isListMode ? <LayoutGrid className="h-6 w-6" /> : <List className="h-6 w-6" />}
         </Button>
       </div>
 
@@ -184,6 +194,8 @@ export function NoteCard({ noteId, initialTiles = [] }: NoteCardProps) {
                   onDelete={deleteTile}
                   isFocused={focusedTileId === tile.id}
                   isDeleting={deletingTileId === tile.id}
+                  isListMode={isListMode}
+                  onFocus={() => handleTileFocus(tile.id)}
                 />
               </div>
             ))}
