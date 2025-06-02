@@ -1204,7 +1204,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
                           disabled={isTyping}
                         >
                           <Pencil className="h-4 w-4 mr-2" />
-                          Edit Response
+                          Edit 
                         </Button>
                       )}
                       <Button
@@ -1214,7 +1214,7 @@ export function Tile({ id, title, content, position, onUpdate, onDelete, isFocus
                         disabled={isTyping}
                       >
                         <Save className="h-4 w-4 mr-2" />
-                        Save Response
+                        Save 
                       </Button>
                     </div>
                   </div>
